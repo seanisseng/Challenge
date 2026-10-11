@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Builds
+dist/
+build/
+*.tsbuildinfo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+coverage/
+htmlcov/
+.coverage
+
+# Environment
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env
+
+# Supabase CLI temp
+backend/supabase/.temp/
+backend/supabase/.branches/
+
+# Editor / OS
+.vscode/*
+!.vscode/tasks.json
+.idea/
+.DS_Store
+Thumbs.db
+*.log
