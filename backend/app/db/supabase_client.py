@@ -1,11 +1,9 @@
-"""Supabase client factories.
+"""Supabase client factory.
 
-Two clients are provided:
-
-* ``get_admin_client``  — uses the service-role key, bypasses RLS. Server-side
-  trusted operations only (admin review, signed URL generation).
-* ``get_anon_client``   — uses the anon key and respects RLS. Use with a
-  team's access token to act on that team's behalf.
+There is exactly one client: the service-role client. Every browser request
+goes through the FastAPI backend, which is the only holder of this key, so
+Row Level Security stays enabled with no policies and the anon key can read
+nothing at all.
 """
 
 from __future__ import annotations
@@ -22,6 +20,8 @@ def get_admin_client() -> Client:
     global _admin_client
     if _admin_client is None:
         settings = get_settings()
+        if not settings.supabase_url:
+            raise RuntimeError("SUPABASE_URL is not set. Copy .env.example to .env.")
         if not settings.supabase_service_role_key:
             raise RuntimeError(
                 "SUPABASE_SERVICE_ROLE_KEY is not set. Copy .env.example to .env."
@@ -30,12 +30,3 @@ def get_admin_client() -> Client:
             settings.supabase_url, settings.supabase_service_role_key
         )
     return _admin_client
-
-
-def get_anon_client(access_token: str | None = None) -> Client:
-    """Return an anon-key client, optionally scoped to a user's access token."""
-    settings = get_settings()
-    client = create_client(settings.supabase_url, settings.supabase_anon_key)
-    if access_token:
-        client.postgrest.auth(access_token)
-    return client

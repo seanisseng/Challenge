@@ -2,31 +2,123 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Start App",
+      "label": "Backend: Setup (venv + pip install)",
       "type": "shell",
-      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}\\start.ps1\"",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "if (-not (Test-Path .venv)) { python -m venv .venv }; .\\.venv\\Scripts\\python.exe -m pip install -r requirements.txt"
+      ],
+      "options": { "cwd": "${workspaceFolder}\\backend" },
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
         "panel": "dedicated",
+        "group": "backend",
         "clear": true
       }
     },
     {
-      "label": "Start App (skip install)",
+      "label": "Backend: Run",
       "type": "shell",
-      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}\\start.ps1\" -SkipInstall",
+      "command": "${workspaceFolder}\\backend\\.venv\\Scripts\\python.exe",
+      "args": [
+        "-m",
+        "uvicorn",
+        "app.main:app",
+        "--reload",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000"
+      ],
+      "options": { "cwd": "${workspaceFolder}\\backend" },
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
         "panel": "dedicated",
+        "group": "backend",
+        "clear": false
+      }
+    },
+    {
+      "label": "Backend: Tests",
+      "type": "shell",
+      "command": "${workspaceFolder}\\backend\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "pytest", "-q"],
+      "options": { "cwd": "${workspaceFolder}\\backend" },
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "backend",
         "clear": true
       }
     },
     {
-      "label": "Stop App",
+      "label": "Frontend: Setup (npm install)",
       "type": "shell",
-      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}\\stop.ps1\"",
+      "command": "npm",
+      "args": ["install", "--no-fund", "--no-audit"],
+      "options": { "cwd": "${workspaceFolder}\\frontend" },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "frontend",
+        "clear": true
+      }
+    },
+    {
+      "label": "Frontend: Run",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "dev"],
+      "options": { "cwd": "${workspaceFolder}\\frontend" },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "frontend",
+        "clear": false
+      }
+    },
+    {
+      "label": "Frontend: Build",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "options": { "cwd": "${workspaceFolder}\\frontend" },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "frontend",
+        "clear": true
+      }
+    },
+    {
+      "label": "Start All (Backend + Frontend)",
+      "dependsOn": ["Backend: Run", "Frontend: Run"],
+      "dependsOrder": "parallel",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Stop All",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\stop.ps1"
+      ],
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",

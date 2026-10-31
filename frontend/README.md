@@ -20,7 +20,7 @@ frontend/
 ```powershell
 cd frontend
 npm install
-copy .env.example .env    # VITE_* keys from `supabase status` (backend/)
+copy .env.example .env    # VITE_* keys from the Supabase dashboard
 npm run dev               # http://localhost:5173
 ```
 

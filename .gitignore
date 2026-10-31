@@ -25,9 +25,8 @@ htmlcov/
 backend/.env
 frontend/.env
 
-# Supabase CLI temp
-backend/supabase/.temp/
-backend/supabase/.branches/
+# Dev server bookkeeping (written by start.ps1, read by stop.ps1)
+.dev-servers.json
 
 # Editor / OS
 .vscode/*

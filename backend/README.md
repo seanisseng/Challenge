@@ -1,4 +1,4 @@
-# Backend — API + Supabase Database
+# Backend - API + Supabase Database
 
 FastAPI service plus the **Postgres/Supabase data layer** for the scavenger
 hunt. The database folder (`supabase/`) is the heart of the project: the
@@ -7,69 +7,102 @@ race-safe no matter which client calls them.
 
 ```
 backend/
-├── app/                     FastAPI app
-│   ├── main.py              app + /health + /docs
-│   ├── config.py            env-driven settings
-│   └── db/supabase_client.py admin (service-role) + anon clients
-├── tests/                   pytest smoke tests (no live DB required)
-├── supabase/                Supabase project root
-│   ├── config.toml
-│   ├── migrations/          schema, RLS, RPCs, storage, realtime
-│   └── seed.sql             demo session + banana-tree example
-└── requirements.txt
+  app/
+    main.py            app wiring, CORS, routers
+    config.py          env-driven settings + admin token derivation
+    models.py          request schemas
+    repo.py            every database and storage call
+    snapshots.py       the payloads pushed to clients
+    realtime.py        in-process WebSocket hub
+    deps.py            the two credential gates
+    routers/
+      play.py          /api/join, /api/state, /api/submissions, /api/clues
+      admin.py         PIN login, sessions, content, review
+      ws.py            /ws
+  tests/               pytest suite (unit + optional live flow)
+  supabase/
+    migrations/        schema, RLS, RPCs, storage, realtime, hardening
+    seed.sql           optional demo session (not applied anywhere)
+  requirements.txt
 ```
 
 ## Running the database
 
-```powershell
-cd backend
-supabase start          # boots Postgres/Auth/Storage/Realtime in Docker
-supabase db reset       # applies migrations/*.sql then seed.sql
-supabase status         # prints API URL + anon / service-role keys
-```
+The database is **hosted on Supabase Cloud** - project `zrfilmdzczsgfzmhfgbd`
+("Game 2 Challenge", `eu-north-1`, Postgres 17). There is no local database
+container; nothing here needs Docker or the Supabase CLI.
 
-All 7 migrations apply cleanly on a fresh database; `seed.sql` populates a
-playable demo session (room code `SUNSET`).
+Connection details live in `backend/.env`:
+
+| Variable | Used for |
+|----------|----------|
+| `SUPABASE_URL` | `https://zrfilmdzczsgfzmhfgbd.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | the only key the backend uses; bypasses RLS |
+| `DATABASE_URL` | direct Postgres connection for `psql` / migration tooling |
+| `ADMIN_PIN` | the host console PIN (never stored in the database) |
+
+`SUPABASE_ANON_KEY` is kept only for reference - the backend does not use it.
+The frontend never sees any Supabase key.
+
+All migrations are already applied. Verify the live state any time with:
+
+```sql
+select * from supabase_migrations.schema_migrations order by version;
+```
 
 ## Auth model
 
-- **Admins** — real email/password accounts listed in `admin_users`.
-  `public.is_admin()` gates every privileged RPC and RLS policy.
-- **Teams** — Supabase **anonymous sign-in**. One auth user maps to one team
-  (`teams.user_id` is unique); `public.current_team_id()` /
-  `public.current_session_id()` derive identity inside RLS.
+There are no user accounts anywhere - not in Supabase Auth, not in a table.
+
+| Role | Credential | Where it lives | Sent as |
+|------|-----------|----------------|---------|
+| Host | a PIN | `ADMIN_PIN` in `backend/.env` | `X-Admin-Token` |
+| Player | a per-team join code | `teams.join_code` | `X-Team-Token` after joining |
+
+- **The admin token is derived, not stored.** `POST /api/admin/login` checks the
+  PIN and returns `hmac_sha256(ADMIN_PIN, "challenge-admin-v1")`. Rotating
+  `ADMIN_PIN` invalidates every token that was ever issued, with no session
+  table to clean up.
+- **A team code is a shared credential.** The host picks the team count when
+  creating a session; the database generates one unique 6-character code per
+  team. Every teammate types the same code, then their own name, and gets their
+  own `team_members` row with its own token. Names are unique per team,
+  case-insensitively.
+- **RLS stays on with zero policies.** Anon and authenticated have no table
+  grants at all, so a leaked anon key reads nothing. Every query runs through
+  the backend's service-role client.
 
 ## Entity relationships
 
 ```
-game_sessions 1─┬─* teams 1──* team_clues *──1 clues
-                │                 │
-                ├─* clues         │
-                ├─* challenges 1──┘
-                └─* submissions *──1 challenges
-                                 └──1 teams
-submission_events *──1 submissions
+game_sessions 1---* teams 1---* team_members
+                 |     |
+                 |     +---* team_clues *---1 clues
+                 |     +---* submissions
+                 +---* clues
+                 +---* challenges *---1 submissions
+submission_events *---1 submissions
 ```
 
 ### Tables
 
 | Table | Purpose | Notable columns |
 |-------|---------|-----------------|
-| `admin_users` | Admin allow-list | `user_id → auth.users` |
-| `game_sessions` | Game room + lifecycle | `room_code` unique, `status`, `active_task_limit` (default 6), `final_destination` (admin-only) |
-| `teams` | A team in a session | unique `(session_id, name)`, unique `user_id` |
+| `game_sessions` | Game room + lifecycle | `room_code` unique, `status`, `team_count`, `active_task_limit`, `final_destination` |
+| `teams` | One team slot per session | unique `(session_id, name)`, unique `join_code` |
+| `team_members` | A person who joined a team | `name`, unique `(team_id, lower(name))`, unique `token` |
 | `clues` | Clue content per tier | `tier` (`tier1/2/3`), `body`, `media_url` |
 | `challenges` | Pool + live board | `clue_tier`, `clue_id`, `status`, `is_active`, `claimed_by_team_id` |
-| `submissions` | Photo proof + review | `photo_path`, `status`, `reviewed_by` |
+| `submissions` | Photo proof + review | `photo_path`, `status`, `team_member_id`, `reviewed_by` |
 | `team_clues` | Unlocked clue inventory | unique `(team_id, clue_id)` |
-| `submission_events` | Audit trail | `event`, `actor_id` |
+| `submission_events` | Audit trail | `event`, `actor_id` (text: member id or `'admin'`) |
 
 ### Enums
 
-`session_status`: `lobby` · `active` · `ended`
-`challenge_status`: `open` · `pending_approval` · `claimed`
-`clue_tier`: `tier1` · `tier2` · `tier3`
-`submission_status`: `pending` · `approved` · `rejected`
+`session_status`: `lobby` -> `active` -> `ended`
+`challenge_status`: `open` -> `pending_approval` -> `claimed`
+`clue_tier`: `tier1` -> `tier2` -> `tier3`
+`submission_status`: `pending` -> `approved` | `rejected`
 
 ## Sniping mechanics (enforced in Postgres)
 
@@ -78,55 +111,81 @@ submission_events *──1 submissions
   (`submissions_one_approved_per_challenge`). A second index stops a team from
   double-submitting the same challenge while pending.
 - **Guard trigger.** `submissions_before_insert` locks the challenge and
-  refuses inserts against a `claimed` challenge, and flips `open →
-  pending_approval` — so even a direct REST insert can't cheat.
+  refuses inserts against a `claimed` challenge, and flips `open ->
+  pending_approval` - so even a direct REST insert cannot cheat.
 - **Atomic approval.** `approve_submission()` runs in one transaction: marks
   the winner, claims the challenge, grants the matching tier clue, auto-rejects
   rival pending submissions, and refills the board.
+- **Clue fallback.** A challenge points at a clue only through `clue_tier`.
+  `approve_submission` uses `challenges.clue_id` when set, otherwise the first
+  clue of that tier in the session.
 
 ## RPC reference
 
-All are `SECURITY DEFINER` and re-check identity internally.
+All are `SECURITY DEFINER` and executable only by `service_role`.
 
-| RPC | Caller | Effect |
-|-----|--------|--------|
-| `join_session(room_code, team_name)` | team | Idempotent join/rename |
-| `submit_proof(challenge_id, photo_path, photo_url?)` | team | Creates a pending submission |
-| `approve_submission(submission_id, note?)` | admin | Claims challenge + grants clue |
-| `reject_submission(submission_id, note?)` | admin | Rejects; reopens board if last pending |
-| `refill_board(session_id)` | admin | Retires claimed, activates pool up to `active_task_limit` |
+| RPC | Effect |
+|-----|--------|
+| `generate_join_code()` | 6 chars from a 32-char alphabet with no `0/O/1/I/L` |
+| `create_session(name, team_count, task_limit?, room_code?)` | Creates a session plus `team_count` team slots, each with a unique code |
+| `join_team(join_code, member_name)` | Redeems a code + name, returns that device's member token |
+| `submit_proof(team_id, member_id, challenge_id, photo_path, photo_url?)` | Creates a pending submission |
+| `approve_submission(submission_id, note?)` | Claims the challenge, grants the clue, rejects rivals, refills |
+| `reject_submission(submission_id, note?)` | Rejects; reopens the board if it was the last pending |
+| `refill_board(session_id)` | Retires claimed challenges, activates pool up to `active_task_limit` |
 
-## RLS matrix
+## API surface
 
-| Table | Admin | Team (own) | Team (other sessions) |
-|-------|-------|-----------|------------------------|
-| `game_sessions` | all | read own session | ✗ |
-| `teams` | all | read session peers, update self | ✗ |
-| `clues` | all | read **only unlocked** | ✗ |
-| `challenges` | all | read active board of session | ✗ |
-| `submissions` | all | insert + read own | ✗ |
-| `team_clues` | all | read own | ✗ |
-| `submission_events` | all | read own submissions' events | ✗ |
-| `admin_users` | read | ✗ | ✗ |
+Team endpoints take `X-Team-Token`; admin endpoints take `X-Admin-Token`
+(except login).
 
-Helpers used by policies: `is_admin()`, `current_team_id()`, `current_session_id()`.
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `POST` | `/api/admin/login` | PIN body | Returns the derived admin token |
+| `GET` | `/api/admin/sessions` | admin | List sessions |
+| `POST` | `/api/admin/sessions` | admin | Create a session + team codes |
+| `GET` | `/api/admin/sessions/{id}/state` | admin | Full console snapshot |
+| `POST` | `/api/admin/sessions/{id}/start` | admin | Activate the board, go live |
+| `POST` | `/api/admin/sessions/{id}/end` | admin | End the game |
+| `POST` | `/api/admin/sessions/{id}/challenges` | admin | Add a challenge (goes live if there is room) |
+| `GET`/`POST` | `/api/admin/sessions/{id}/clues` | admin | List / add clues |
+| `POST` | `/api/admin/submissions/{id}/approve` | admin | Approve a proof |
+| `POST` | `/api/admin/submissions/{id}/reject` | admin | Reject a proof |
+| `GET` | `/api/admin/submissions/{id}/photo` | admin | Short-lived signed photo URL |
+| `DELETE` | `/api/admin/members/{id}` | admin | Remove a player |
+| `POST` | `/api/join` | none | Redeem a team code + name, returns a token |
+| `GET` | `/api/state` | team | Full player snapshot |
+| `POST` | `/api/submissions` | team | Upload photo proof (multipart) |
+| `GET` | `/api/clues` | team | Only this team's unlocked clues |
+| `WS` | `/ws?token=...` or `/ws?admin_token=...&session_id=...` | either | Live snapshots |
+
+## Live updates
+
+`app/realtime.py` keeps one in-process room per session. Every mutation ends
+with `hub.broadcast(session_id)`, which rebuilds the snapshot and pushes a
+tailored payload to each subscriber: players get their own clues and
+submission states, the admin gets all teams and pending proofs.
+
+This replaces Supabase Realtime deliberately. Without a JWT there is no
+`auth.uid()`, so RLS cannot filter rows per team - the backend does the
+filtering instead. The trade-off is that the API must run as a single process
+(no horizontal scaling) and a restart drops sockets, which the client handles
+by reconnecting with backoff.
+
+Photos are never in the broadcast payload; the admin fetches a signed URL on
+demand from `/api/admin/submissions/{id}/photo`.
 
 ## Storage
 
 Bucket **`challenge-proofs`** (private, 25 MiB, images only). Path convention:
 
 ```
-{session_id}/{team_id}/{filename}
+{session_id}/{team_id}/{uuid}.{ext}
 ```
 
-Teams may upload/read only their own prefix; admins manage all objects.
-Serve files via signed URLs generated server-side with the service-role client.
-
-## Realtime
-
-`challenges`, `teams`, `submissions`, and `team_clues` are added to the
-`supabase_realtime` publication with `replica identity full`. Realtime honors
-RLS, so each team receives only their session's board and their own rows.
+Nothing is reachable directly: anon and authenticated have no `storage.objects`
+grants. The backend uploads with the service-role key and mints short-lived
+signed URLs for the admin console.
 
 ## Migrations
 
@@ -134,22 +193,22 @@ Timestamp-prefixed SQL in `supabase/migrations/`:
 
 | File | Contents |
 |------|----------|
-| `…0001_init_schema` | extensions, enums, tables |
-| `…0002_constraints_indexes` | partial indexes, indexes, triggers |
-| `…0003_helpers` | `is_admin` / `current_team_id` / `current_session_id` |
-| `…0004_rls_policies` | enable RLS + full policy matrix |
-| `…0005_rpc_functions` | join / submit / approve / reject / refill |
-| `…0006_storage` | bucket + storage policies |
-| `…0007_realtime` | publication + replica identity |
+| `*_0001_init_schema` | extensions, enums, tables |
+| `*_0002_constraints_indexes` | partial indexes, indexes, triggers |
+| `*_0003_helpers` | (superseded) auth-derived helper functions |
+| `*_0004_rls_policies` | (superseded) the old auth policy matrix |
+| `*_0005_rpc_functions` | (superseded) auth-based join / submit / approve |
+| `*_0006_storage` | bucket + (superseded) storage policies |
+| `*_0007_realtime` | publication + replica identity |
+| `*_0008_hardening` | revoke `anon` EXECUTE on RPCs, pin trigger `search_path` |
+| `*_0009_team_codes` | **the identity rewrite**: drops `admin_users` and all policies, adds `team_members` and `join_code`, rewrites every RPC |
+| `*_0010_drop_legacy_auth_functions` | removes the dead auth-flavoured overloads |
+| `*_0011_fix_create_session_ambiguity` | fixes the `room_code` OUT-parameter collision |
+| `*_0012_member_name_case_insensitive` | unique `(team_id, lower(name))` |
 
-Add a new migration with:
-
-```powershell
-supabase migration new <name>
-# edit the generated file, then:
-supabase db reset          # local
-supabase db push           # remote
-```
+To change the schema, add a new timestamped file to `supabase/migrations/` and
+apply it to the project (SQL editor, `psql $DATABASE_URL`, or the Supabase MCP
+tools). Keep the file in the repo so the schema stays reproducible from source.
 
 ## Backend app
 
@@ -157,18 +216,33 @@ supabase db push           # remote
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-copy .env.example .env      # fill in keys from `supabase status`
+copy .env.example .env      # fill in the keys and pick an ADMIN_PIN
 uvicorn app.main:app --reload
 ```
 
 - Health: <http://localhost:8000/health>
+- Docs: <http://localhost:8000/docs>
 - Tests: `python -m pytest`
 
-> The FastAPI layer currently exposes only a health check; feature routers are
-> the next milestone and sit on top of the RPCs above.
+### Tests
 
-## Seeded demo data (`supabase/seed.sql`)
+`tests/test_smoke.py`, `tests/test_api_surface.py`, and
+`tests/test_realtime.py` need no database - they cover the routing surface,
+both credential gates, and the WebSocket fan-out.
 
-Room code **`SUNSET`**, 3 teams, 6 clues (2 per tier), 8 challenges (6 live),
-and one already-approved submission. Seeded auth users share the password
-`password123` (e.g. `admin@example.com`, `banana@example.com`).
+`tests/test_live_flow.py` drives a whole game against the hosted project
+(create session, join two teams, race one challenge, approve, verify clue
+unlock, reject, verify reopen) and deletes the session afterwards. It is
+skipped unless you opt in:
+
+```powershell
+$env:CHALLENGE_LIVE_TESTS = "1"
+.\.venv\Scripts\python.exe -m pytest tests/test_live_flow.py -v
+```
+
+## Demo data (`supabase/seed.sql`)
+
+Optional and **not** applied to the hosted project. It calls `create_session`
+for a 3-team "Sunset City Hunt", adds two clues per tier and eight challenges,
+and prints the generated team codes. There are no auth users to create any
+more - hand the printed codes out and play.

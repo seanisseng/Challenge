@@ -1,18 +1,112 @@
-/**
- * Application shell. The join screen, live challenge board, clue inventory,
- * and admin review console will be built on top of the database layer.
- */
+import { useEffect, useState } from "react";
+
+import {
+  fetchTeamState,
+  getAdminToken,
+  getTeamToken,
+  setAdminSession,
+  setAdminToken,
+  setTeamToken,
+} from "./lib/api";
+import { navigate, useRoute } from "./lib/router";
+import type { TeamState } from "./lib/types";
+import AdminConsole from "./screens/AdminConsole";
+import AdminLogin from "./screens/AdminLogin";
+import JoinScreen from "./screens/JoinScreen";
+import TeamDashboard from "./screens/TeamDashboard";
+
 export default function App() {
+  const route = useRoute();
+
+  return route === "/admin" ? (
+    <AdminRoute />
+  ) : (
+    <PlayerRoute />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// players
+// ---------------------------------------------------------------------------
+function PlayerRoute() {
+  const [state, setState] = useState<TeamState | null>(null);
+  const [booting, setBooting] = useState(true);
+
+  // A stored team token means this device already joined: restore silently.
+  useEffect(() => {
+    const token = getTeamToken();
+    if (!token) {
+      setBooting(false);
+      return;
+    }
+    let cancelled = false;
+    fetchTeamState(token)
+      .then((snapshot) => {
+        if (!cancelled) setState(snapshot);
+      })
+      .catch(() => {
+        if (!cancelled) setTeamToken(null);
+      })
+      .finally(() => {
+        if (!cancelled) setBooting(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (booting) return <Booting label="Rejoining your team…" />;
+
+  if (state) {
+    return (
+      <TeamDashboard
+        initialState={state}
+        onLeave={() => {
+          setTeamToken(null);
+          setState(null);
+        }}
+      />
+    );
+  }
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center gap-4 p-8 text-center">
-      <h1 className="text-4xl font-bold text-white">Challenge</h1>
-      <p className="text-slate-400">
-        Real-time competitive scavenger hunt. Join a session, complete photo
-        challenges, and unlock tiered clues to reach the final destination.
-      </p>
-      <span className="rounded-full bg-brand/20 px-4 py-1 text-sm text-brand">
-        Database layer ready — UI coming next
-      </span>
+    <JoinScreen
+      onJoined={setState}
+      onAdmin={() => navigate("/admin")}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// admin
+// ---------------------------------------------------------------------------
+function AdminRoute() {
+  const [authed, setAuthed] = useState(() => Boolean(getAdminToken()));
+
+  if (!authed) {
+    return (
+      <AdminLogin
+        onAuthed={() => setAuthed(true)}
+        onBack={() => navigate("/")}
+      />
+    );
+  }
+
+  return (
+    <AdminConsole
+      onSignOut={() => {
+        setAdminToken(null);
+        setAdminSession(null);
+        setAuthed(false);
+      }}
+    />
+  );
+}
+
+function Booting({ label }: { label: string }) {
+  return (
+    <main className="flex min-h-screen items-center justify-center">
+      <p className="animate-pulse text-sm text-slate-400">{label}</p>
     </main>
   );
 }

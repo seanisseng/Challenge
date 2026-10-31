@@ -1,6 +1,7 @@
 -- ===========================================================================
--- seed.sql  —  demo data for local development
--- Applied automatically by `supabase db reset` after the migrations.
+-- seed.sql  —  demo data (optional, local/dev only)
+-- NOT applied to the hosted project. Run it by hand against a throwaway
+-- database if you want a pre-populated game to click through.
 --
 -- Includes the AGENTS.md banana-tree example and exercises every challenge
 -- status (open / pending_approval / claimed).
