@@ -25,11 +25,10 @@ from app.main import app
 settings = get_settings()
 
 live = pytest.mark.skipif(
-    os.getenv("CHALLENGE_LIVE_TESTS") != "1"
-    or not settings.supabase_service_role_key,
+    os.getenv("CHALLENGE_LIVE_TESTS") != "1" or not settings.service_key,
     reason=(
-        "live tests need CHALLENGE_LIVE_TESTS=1 and a SUPABASE_SERVICE_ROLE_KEY "
-        "in backend/.env"
+        "live tests need CHALLENGE_LIVE_TESTS=1 and a SUPABASE_SECRET_KEY or "
+        "SUPABASE_SERVICE_ROLE_KEY in backend/.env"
     ),
 )
 

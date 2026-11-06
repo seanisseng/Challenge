@@ -37,12 +37,18 @@ Connection details live in `backend/.env`:
 | Variable | Used for |
 |----------|----------|
 | `SUPABASE_URL` | `https://zrfilmdzczsgfzmhfgbd.supabase.co` |
-| `SUPABASE_SERVICE_ROLE_KEY` | the only key the backend uses; bypasses RLS |
+| `SUPABASE_SECRET_KEY` | new-style `sb_secret_...` key - the only key the backend uses; bypasses RLS |
+| `SUPABASE_SERVICE_ROLE_KEY` | legacy `eyJ...` JWT with the same privileges; either name works |
 | `DATABASE_URL` | direct Postgres connection for `psql` / migration tooling |
 | `ADMIN_PIN` | the host console PIN (never stored in the database) |
 
-`SUPABASE_ANON_KEY` is kept only for reference - the backend does not use it.
-The frontend never sees any Supabase key.
+Set **one** of the two key variables - `config.service_key` takes whichever is
+present. Both resolve to the `service_role` Postgres role, and Supabase is
+deprecating the legacy `service_role` JWT by the end of 2026, so the
+`sb_secret_...` secret key is the better choice.
+
+No anon/publishable key is needed anywhere: the frontend never talks to
+Supabase, and RLS has no policies for it to read.
 
 All migrations are already applied. Verify the live state any time with:
 

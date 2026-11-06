@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 
-import { ChallengeStatusBadge, SubmissionStatusBadge, TierBadge } from "../components/Badges";
+import {
+  ChallengeStatusBadge,
+  LivePill,
+  SubmissionStatusBadge,
+  TierBadge,
+} from "../components/Badges";
 import {
   ApiError,
   addChallenge,
@@ -159,36 +164,25 @@ export default function AdminConsole({ onSignOut }: Props) {
 
   return (
     <div className="min-h-screen pb-16">
-      <header className="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/90 backdrop-blur">
+      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3">
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-lg font-bold text-white">
+            <h1 className="truncate text-lg font-extrabold tracking-tight text-slate-900">
               {session.name}
             </h1>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-600">
               Room{" "}
-              <span className="font-mono tracking-widest text-slate-200">
+              <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono font-bold tracking-widest text-slate-900">
                 {session.room_code}
               </span>{" "}
               · {session.team_count} teams ·{" "}
-              <span className="capitalize">{session.status}</span>
+              <span className="font-semibold capitalize text-slate-700">
+                {session.status}
+              </span>
             </p>
           </div>
 
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${
-              status === "live"
-                ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
-                : "bg-amber-500/15 text-amber-300 ring-amber-500/30"
-            }`}
-          >
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                status === "live" ? "bg-emerald-400" : "bg-amber-400"
-              }`}
-            />
-            {status === "live" ? "Live" : "Offline"}
-          </span>
+          <LivePill status={status} />
 
           {session.status === "lobby" ? (
             <button
@@ -196,7 +190,7 @@ export default function AdminConsole({ onSignOut }: Props) {
               onClick={() =>
                 run(() => startSession(session.id), "could not start session")
               }
-              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500"
+              className="btn-success"
             >
               Start hunt
             </button>
@@ -209,7 +203,7 @@ export default function AdminConsole({ onSignOut }: Props) {
                 if (window.confirm("End the game for everyone?"))
                   void run(() => endSession(session.id), "could not end session");
               }}
-              className="rounded-lg border border-rose-500/40 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/10"
+              className="btn-danger"
             >
               End game
             </button>
@@ -221,34 +215,34 @@ export default function AdminConsole({ onSignOut }: Props) {
               setAdminSession(null);
               setSessionId(null);
             }}
-            className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white"
+            className="btn-secondary"
           >
             Switch session
           </button>
           <button
             type="button"
             onClick={onSignOut}
-            className="rounded-lg px-2 py-1.5 text-xs text-slate-500 hover:text-rose-300"
+            className="btn px-2 text-slate-500 hover:text-rose-700"
           >
             Sign out
           </button>
         </div>
 
-        <nav className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-2 pb-1">
+        <nav className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-2">
           {tabs.map((entry) => (
             <button
               key={entry.id}
               type="button"
               onClick={() => setTab(entry.id)}
-              className={`flex shrink-0 items-center gap-1.5 rounded-t-lg px-3 py-2 text-sm font-semibold transition ${
+              className={`flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-bold transition ${
                 tab === entry.id
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-400 hover:text-slate-200"
+                  ? "border-brand text-brand-700"
+                  : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800"
               }`}
             >
               {entry.label}
               {entry.badge ? (
-                <span className="rounded-full bg-brand px-1.5 text-[10px] font-bold text-white">
+                <span className="rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
                   {entry.badge}
                 </span>
               ) : null}
@@ -259,7 +253,10 @@ export default function AdminConsole({ onSignOut }: Props) {
 
       <main className="mx-auto max-w-6xl px-4 py-6">
         {error ? (
-          <p className="mb-4 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          <p
+            role="alert"
+            className="mb-4 rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-800"
+          >
             {error}
           </p>
         ) : null}
@@ -292,7 +289,12 @@ export default function AdminConsole({ onSignOut }: Props) {
           <ContentTab
             sessionId={session.id}
             onError={(message) => setError(message)}
-            onDone={() => void run(() => fetchAdminState(session.id).then(setState), "reload failed")}
+            onDone={() =>
+              void run(
+                () => fetchAdminState(session.id).then(setState),
+                "reload failed",
+              )
+            }
           />
         ) : null}
 
@@ -348,57 +350,62 @@ function SessionPicker({
     <main className="mx-auto max-w-3xl px-4 py-10">
       <header className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-brand">
+          <span className="inline-flex items-center rounded-full bg-brand-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-brand-700 ring-1 ring-inset ring-brand-200">
             Host console
-          </p>
-          <h1 className="mt-1 text-2xl font-bold text-white">Sessions</h1>
+          </span>
+          <h1 className="mt-3 text-2xl font-extrabold tracking-tight text-slate-900">
+            Sessions
+          </h1>
         </div>
-        <button
-          type="button"
-          onClick={onSignOut}
-          className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white"
-        >
+        <button type="button" onClick={onSignOut} className="btn-secondary">
           Sign out
         </button>
       </header>
 
       {error ? (
-        <p className="mb-4 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+        <p
+          role="alert"
+          className="mb-4 rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-800"
+        >
           {error}
         </p>
       ) : null}
 
-      <section className="mb-8 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
+      <section className="card mb-8 p-5">
+        <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-500">
           New session
         </h2>
         <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
           <label className="sm:col-span-2">
-            <span className="mb-1 block text-xs text-slate-400">Hunt name</span>
+            <span className="mb-1.5 block text-xs font-semibold text-slate-600">
+              Hunt name
+            </span>
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Saturday Night Hunt"
               maxLength={80}
               required
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white outline-none focus:border-brand"
+              className="field"
             />
           </label>
 
           <label>
-            <span className="mb-1 block text-xs text-slate-400">Teams</span>
+            <span className="mb-1.5 block text-xs font-semibold text-slate-600">
+              Teams
+            </span>
             <input
               type="number"
               min={1}
               max={40}
               value={teamCount}
               onChange={(event) => setTeamCount(Number(event.target.value))}
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white outline-none focus:border-brand"
+              className="field"
             />
           </label>
 
           <label>
-            <span className="mb-1 block text-xs text-slate-400">
+            <span className="mb-1.5 block text-xs font-semibold text-slate-600">
               Challenges on the board
             </span>
             <input
@@ -407,14 +414,14 @@ function SessionPicker({
               max={24}
               value={taskLimit}
               onChange={(event) => setTaskLimit(Number(event.target.value))}
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white outline-none focus:border-brand"
+              className="field"
             />
           </label>
 
           <button
             type="submit"
             disabled={busy || name.trim().length === 0}
-            className="rounded-lg bg-brand px-4 py-2 font-semibold text-white hover:bg-brand-dark disabled:opacity-40 sm:col-span-2"
+            className="btn-primary sm:col-span-2"
           >
             {busy ? "Creating…" : "Create session"}
           </button>
@@ -422,35 +429,39 @@ function SessionPicker({
       </section>
 
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
           Existing sessions
         </h2>
         {loading && sessions.length === 0 ? (
           <p className="text-sm text-slate-500">Loading…</p>
         ) : sessions.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-slate-700 px-4 py-8 text-center text-sm text-slate-500">
+          <p className="rounded-2xl border border-dashed border-slate-300 bg-white/60 px-4 py-8 text-center text-sm text-slate-500">
             No sessions yet — create one above.
           </p>
         ) : (
-          <ul className="divide-y divide-slate-800 overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
+          <ul className="card divide-y divide-slate-200 overflow-hidden">
             {sessions.map((entry) => (
               <li key={entry.id}>
                 <button
                   type="button"
                   onClick={() => onSelect(entry.id)}
-                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-800/60"
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-slate-50"
                 >
                   <span className="min-w-0">
-                    <span className="block truncate font-semibold text-slate-100">
+                    <span className="block truncate font-bold text-slate-900">
                       {entry.name}
                     </span>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-slate-600">
                       {entry.team_count} teams · room{" "}
-                      <span className="font-mono">{entry.room_code}</span> ·{" "}
-                      <span className="capitalize">{entry.status}</span>
+                      <span className="font-mono font-semibold">
+                        {entry.room_code}
+                      </span>{" "}
+                      · <span className="capitalize">{entry.status}</span>
                     </span>
                   </span>
-                  <span className="shrink-0 text-xs text-brand">Open →</span>
+                  <span className="shrink-0 text-xs font-bold text-brand-700">
+                    Open →
+                  </span>
                 </button>
               </li>
             ))}
@@ -479,11 +490,11 @@ function ReviewTab({
   return (
     <div className="space-y-8">
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
           Waiting for review ({pending.length})
         </h2>
         {pending.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-slate-700 px-4 py-8 text-center text-sm text-slate-500">
+          <p className="rounded-2xl border border-dashed border-slate-300 bg-white/60 px-4 py-8 text-center text-sm text-slate-500">
             Nothing to review right now.
           </p>
         ) : (
@@ -502,20 +513,20 @@ function ReviewTab({
 
       {history.length > 0 ? (
         <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
             History
           </h2>
-          <ul className="divide-y divide-slate-800 overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
+          <ul className="card divide-y divide-slate-200 overflow-hidden">
             {history.map((submission) => (
               <li
                 key={submission.id}
                 className="flex flex-wrap items-center gap-2 px-4 py-2.5 text-sm"
               >
-                <span className="font-semibold text-slate-200">
+                <span className="font-bold text-slate-800">
                   {submission.teams?.name ?? "Team"}
                 </span>
-                <span className="text-slate-500">·</span>
-                <span className="min-w-0 flex-1 truncate text-slate-400">
+                <span className="text-slate-400">·</span>
+                <span className="min-w-0 flex-1 truncate text-slate-600">
                   {submission.challenges?.title ?? "Challenge"}
                 </span>
                 <SubmissionStatusBadge status={submission.status} />
@@ -556,8 +567,8 @@ function ReviewCard({
   }, [submission.id]);
 
   return (
-    <li className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
-      <div className="aspect-[4/3] bg-slate-950">
+    <li className="card overflow-hidden">
+      <div className="aspect-[4/3] bg-slate-100">
         {photo ? (
           <a href={photo} target="_blank" rel="noreferrer">
             <img
@@ -567,23 +578,23 @@ function ReviewCard({
             />
           </a>
         ) : (
-          <div className="flex h-full items-center justify-center text-xs text-slate-600">
+          <div className="flex h-full items-center justify-center text-xs font-medium text-slate-500">
             {photoError ? "photo unavailable" : "loading photo…"}
           </div>
         )}
       </div>
 
-      <div className="space-y-2 p-4">
-        <p className="text-sm font-bold text-white">
+      <div className="space-y-2.5 p-4">
+        <p className="text-sm font-bold text-slate-900">
           {submission.teams?.name ?? "Team"}
           {submission.team_members?.name ? (
-            <span className="font-normal text-slate-400">
+            <span className="font-medium text-slate-600">
               {" "}
               · {submission.team_members.name}
             </span>
           ) : null}
         </p>
-        <p className="text-sm text-slate-300">
+        <p className="text-sm text-slate-700">
           {submission.challenges?.title ?? "Challenge"}
         </p>
 
@@ -592,21 +603,21 @@ function ReviewCard({
           onChange={(event) => setNote(event.target.value)}
           placeholder="Optional note for the team"
           maxLength={280}
-          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white outline-none placeholder:text-slate-600 focus:border-brand"
+          className="field py-1.5 text-sm"
         />
 
         <div className="flex gap-2">
           <button
             type="button"
             onClick={() => onApprove(submission.id, note || undefined)}
-            className="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
+            className="btn-success flex-1"
           >
             Approve
           </button>
           <button
             type="button"
             onClick={() => onReject(submission.id, note || undefined)}
-            className="flex-1 rounded-lg border border-rose-500/40 px-3 py-2 text-sm font-semibold text-rose-300 hover:bg-rose-500/10"
+            className="btn-danger flex-1"
           >
             Reject
           </button>
@@ -640,22 +651,19 @@ function CodesTab({
 
   return (
     <section>
-      <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-400">
+      <h2 className="mb-1 text-sm font-bold uppercase tracking-wide text-slate-500">
         Team join codes
       </h2>
-      <p className="mb-3 text-xs text-slate-500">
+      <p className="mb-3 text-xs text-slate-600">
         Every player on a team enters the same code, then their own name.
       </p>
 
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {teams.map((team) => (
-          <li
-            key={team.id}
-            className="rounded-xl border border-slate-800 bg-slate-900/70 p-4"
-          >
+          <li key={team.id} className="card p-4">
             <div className="flex items-center justify-between gap-2">
-              <span className="font-semibold text-slate-100">{team.name}</span>
-              <span className="text-xs text-slate-500">
+              <span className="font-bold text-slate-900">{team.name}</span>
+              <span className="text-xs font-semibold text-slate-500">
                 {team.members.length} player{team.members.length === 1 ? "" : "s"}
               </span>
             </div>
@@ -664,11 +672,11 @@ function CodesTab({
               type="button"
               onClick={() => void copy(team.join_code)}
               title="Copy code"
-              className="mt-2 w-full rounded-lg border border-dashed border-slate-600 px-3 py-2 font-mono text-xl font-bold tracking-[0.3em] text-amber-300 hover:border-amber-400"
+              className="mt-2.5 w-full rounded-xl border-2 border-brand-200 bg-brand-50 px-3 py-2 font-mono text-xl font-extrabold tracking-[0.3em] text-brand-700 transition hover:border-brand hover:bg-brand-100"
             >
               {team.join_code}
             </button>
-            <p className="mt-1 text-center text-[11px] text-slate-500">
+            <p className="mt-1 text-center text-[11px] font-semibold text-slate-500">
               {copied === team.join_code ? "copied!" : "tap to copy"}
             </p>
 
@@ -680,7 +688,7 @@ function CodesTab({
                       type="button"
                       onClick={() => onRemove(member.id)}
                       title="Remove player"
-                      className="rounded-full bg-slate-800 px-2 py-0.5 text-xs text-slate-300 hover:bg-rose-500/20 hover:text-rose-200"
+                      className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 transition hover:bg-rose-100 hover:text-rose-800"
                     >
                       {member.name} ✕
                     </button>
@@ -688,7 +696,7 @@ function CodesTab({
                 ))}
               </ul>
             ) : (
-              <p className="mt-2 text-xs text-slate-600">Nobody joined yet.</p>
+              <p className="mt-2 text-xs text-slate-500">Nobody joined yet.</p>
             )}
           </li>
         ))}
@@ -706,37 +714,34 @@ function BoardTab({ state }: { state: AdminState }) {
 
   return (
     <section>
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
+      <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
         Live board ({state.board.length} of {state.session.active_task_limit})
       </h2>
 
       {state.board.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-slate-700 px-4 py-8 text-center text-sm text-slate-500">
+        <p className="rounded-2xl border border-dashed border-slate-300 bg-white/60 px-4 py-8 text-center text-sm text-slate-500">
           No active challenges. Add challenges under Content, then start the
           hunt.
         </p>
       ) : (
         <ul className="space-y-3">
           {state.board.map((challenge) => (
-            <li
-              key={challenge.id}
-              className="rounded-xl border border-slate-800 bg-slate-900/70 p-4"
-            >
+            <li key={challenge.id} className="card p-4">
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <TierBadge tier={challenge.clue_tier} />
                 <ChallengeStatusBadge status={challenge.status} />
               </div>
-              <p className="font-bold text-white">{challenge.title}</p>
+              <p className="font-bold text-slate-900">{challenge.title}</p>
               {challenge.location_area ? (
-                <p className="text-xs text-slate-400">
+                <p className="text-xs font-medium text-slate-600">
                   📍 {challenge.location_area}
                 </p>
               ) : null}
-              <p className="mt-1 text-sm text-slate-300">
+              <p className="mt-1 text-sm text-slate-700">
                 🎯 {challenge.completion_condition}
               </p>
               {challenge.status === "claimed" ? (
-                <p className="mt-2 text-xs text-emerald-300">
+                <p className="mt-2 text-xs font-bold text-emerald-700">
                   Claimed by {teamName(challenge.claimed_by_team_id)}
                 </p>
               ) : null}
@@ -833,8 +838,8 @@ function ContentTab({
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
-      <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
+      <section className="card p-5">
+        <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-500">
           Add a challenge
         </h2>
         <form onSubmit={submitChallenge} className="space-y-3">
@@ -844,14 +849,14 @@ function ContentTab({
             placeholder="Banana tree selfie"
             maxLength={120}
             required
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white outline-none placeholder:text-slate-600 focus:border-brand"
+            className="field"
           />
           <input
             value={area}
             onChange={(event) => setArea(event.target.value)}
             placeholder="Location / area"
             maxLength={160}
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white outline-none placeholder:text-slate-600 focus:border-brand"
+            className="field"
           />
           <textarea
             value={condition}
@@ -860,21 +865,17 @@ function ContentTab({
             maxLength={400}
             required
             rows={3}
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white outline-none placeholder:text-slate-600 focus:border-brand"
+            className="field"
           />
           <TierSelect value={challengeTier} onChange={setChallengeTier} />
-          <button
-            type="submit"
-            disabled={busy}
-            className="w-full rounded-lg bg-brand px-4 py-2 font-semibold text-white hover:bg-brand-dark disabled:opacity-40"
-          >
+          <button type="submit" disabled={busy} className="btn-primary w-full">
             Add challenge
           </button>
         </form>
       </section>
 
-      <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
+      <section className="card p-5">
+        <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-500">
           Add a clue
         </h2>
         <form onSubmit={submitClue} className="space-y-3">
@@ -885,7 +886,7 @@ function ContentTab({
             placeholder="Head toward the river"
             maxLength={120}
             required
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white outline-none placeholder:text-slate-600 focus:border-brand"
+            className="field"
           />
           <textarea
             value={clueBody}
@@ -894,45 +895,41 @@ function ContentTab({
             maxLength={1000}
             required
             rows={3}
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white outline-none placeholder:text-slate-600 focus:border-brand"
+            className="field"
           />
           <input
             value={clueMedia}
             onChange={(event) => setClueMedia(event.target.value)}
             placeholder="Reference image URL (optional)"
             maxLength={500}
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white outline-none placeholder:text-slate-600 focus:border-brand"
+            className="field"
           />
-          <button
-            type="submit"
-            disabled={busy}
-            className="w-full rounded-lg bg-brand px-4 py-2 font-semibold text-white hover:bg-brand-dark disabled:opacity-40"
-          >
+          <button type="submit" disabled={busy} className="btn-primary w-full">
             Add clue
           </button>
         </form>
 
-        <div className="mt-5">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="mt-5 border-t border-slate-200 pt-4">
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
             Clues in this session ({clues.length})
           </h3>
           <ul className="space-y-2">
             {clues.map((clue) => (
               <li
                 key={clue.id}
-                className="rounded-lg border border-slate-800 px-3 py-2"
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
               >
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <TierBadge tier={clue.tier} />
-                  <span className="text-sm font-semibold text-slate-200">
+                  <span className="text-sm font-bold text-slate-900">
                     {clue.title}
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-slate-400">{clue.body}</p>
+                <p className="mt-1 text-xs text-slate-600">{clue.body}</p>
               </li>
             ))}
             {clues.length === 0 ? (
-              <li className="text-xs text-slate-600">
+              <li className="text-xs text-slate-500">
                 No clues yet — approving a challenge will unlock nothing until
                 you add one.
               </li>
@@ -958,10 +955,10 @@ function TierSelect({
           key={tier}
           type="button"
           onClick={() => onChange(tier)}
-          className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold ring-1 transition ${
+          className={`flex-1 rounded-xl px-3 py-1.5 text-xs font-bold ring-1 ring-inset transition ${
             value === tier
               ? "bg-brand text-white ring-brand"
-              : "text-slate-400 ring-slate-700 hover:text-slate-200"
+              : "bg-white text-slate-600 ring-slate-300 hover:bg-slate-50"
           }`}
         >
           {TIER_LABEL[tier]}
@@ -976,43 +973,44 @@ function TierSelect({
 // ---------------------------------------------------------------------------
 function ProgressTab({ state }: { state: AdminState }) {
   const rows = [...state.progress].sort(
-    (a, b) => b.clue_count - a.clue_count || a.team_name.localeCompare(b.team_name),
+    (a, b) =>
+      b.clue_count - a.clue_count || a.team_name.localeCompare(b.team_name),
   );
 
   return (
     <section>
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
+      <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
         Team progress
       </h2>
-      <div className="overflow-x-auto rounded-xl border border-slate-800">
+      <div className="card overflow-x-auto">
         <table className="w-full min-w-[32rem] text-left text-sm">
-          <thead className="bg-slate-900/80 text-xs uppercase tracking-wide text-slate-500">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-4 py-2">Team</th>
-              <th className="px-4 py-2">Code</th>
-              <th className="px-4 py-2 text-right">Players</th>
-              <th className="px-4 py-2 text-right">Challenges won</th>
-              <th className="px-4 py-2 text-right">Clues</th>
+              <th className="px-4 py-2.5 font-bold">Team</th>
+              <th className="px-4 py-2.5 font-bold">Code</th>
+              <th className="px-4 py-2.5 text-right font-bold">Players</th>
+              <th className="px-4 py-2.5 text-right font-bold">Won</th>
+              <th className="px-4 py-2.5 text-right font-bold">Clues</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800">
+          <tbody className="divide-y divide-slate-200">
             {rows.map((row) => {
               const team = state.teams.find((t) => t.id === row.team_id);
               return (
-                <tr key={row.team_id} className="bg-slate-900/40">
-                  <td className="px-4 py-2 font-semibold text-slate-100">
+                <tr key={row.team_id} className="hover:bg-slate-50">
+                  <td className="px-4 py-2.5 font-bold text-slate-900">
                     {row.team_name}
                   </td>
-                  <td className="px-4 py-2 font-mono text-xs tracking-widest text-amber-300">
+                  <td className="px-4 py-2.5 font-mono text-xs font-bold tracking-widest text-brand-700">
                     {team?.join_code ?? "—"}
                   </td>
-                  <td className="px-4 py-2 text-right text-slate-300">
+                  <td className="px-4 py-2.5 text-right font-medium text-slate-700">
                     {row.member_count}
                   </td>
-                  <td className="px-4 py-2 text-right text-slate-300">
+                  <td className="px-4 py-2.5 text-right font-medium text-slate-700">
                     {row.claimed_count}
                   </td>
-                  <td className="px-4 py-2 text-right font-bold text-amber-300">
+                  <td className="px-4 py-2.5 text-right font-extrabold text-amber-700">
                     {row.clue_count}
                   </td>
                 </tr>

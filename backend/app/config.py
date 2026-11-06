@@ -22,8 +22,15 @@ class Settings(BaseSettings):
     # points at the hosted Supabase project. Leaving them blank makes a
     # missing .env fail loudly instead of silently targeting a dead host.
     supabase_url: str = ""
-    supabase_anon_key: str = ""
+
+    # Supabase ships two names for the same elevated credential:
+    #   * SUPABASE_SECRET_KEY        - the new `sb_secret_...` key (preferred)
+    #   * SUPABASE_SERVICE_ROLE_KEY  - the legacy `eyJ...` JWT (valid to end 2026)
+    # Both resolve to the `service_role` Postgres role, so either works. Set
+    # whichever the dashboard gave you; `service_key` picks the one present.
+    supabase_secret_key: str = ""
     supabase_service_role_key: str = ""
+
     database_url: str = ""
 
     backend_host: str = "0.0.0.0"
@@ -37,10 +44,25 @@ class Settings(BaseSettings):
     proof_bucket: str = "challenge-proofs"
     max_upload_bytes: int = 25 * 1024 * 1024
 
+    # --- Game content -------------------------------------------------------
+    # Substituted for the {{phone}} token in challenge text. Keeping the number
+    # here means it never has to be committed or written to the database.
+    contact_phone: str = ""
+
     @property
     def cors_origins(self) -> list[str]:
         """Split the comma-separated CORS origin list into a clean list."""
         return [o.strip() for o in self.backend_cors_origins.split(",") if o.strip()]
+
+    @property
+    def service_key(self) -> str:
+        """The elevated Supabase credential, whichever name it was given under.
+
+        New-style secret keys (`sb_secret_...`) and legacy `service_role` JWTs
+        both map to the same Postgres role, so the backend does not care which
+        one is configured.
+        """
+        return (self.supabase_secret_key or self.supabase_service_role_key).strip()
 
     @property
     def admin_token(self) -> str:

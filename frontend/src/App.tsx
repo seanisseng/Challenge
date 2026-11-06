@@ -106,7 +106,7 @@ function AdminRoute() {
 function Booting({ label }: { label: string }) {
   return (
     <main className="flex min-h-screen items-center justify-center">
-      <p className="animate-pulse text-sm text-slate-400">{label}</p>
+      <p className="animate-pulse text-sm font-medium text-slate-500">{label}</p>
     </main>
   );
 }

@@ -1,9 +1,11 @@
 import type { ChallengeStatus, SubmissionStatus, Tier } from "../lib/types";
 
+// Every badge pairs a very light tint with a dark, saturated foreground, which
+// keeps them readable at a glance in bright outdoor light.
 const tierStyles: Record<Tier, string> = {
-  tier1: "bg-sky-500/15 text-sky-300 ring-sky-500/30",
-  tier2: "bg-amber-500/15 text-amber-300 ring-amber-500/30",
-  tier3: "bg-rose-500/15 text-rose-300 ring-rose-500/30",
+  tier1: "bg-sky-50 text-sky-800 ring-sky-600/25",
+  tier2: "bg-amber-50 text-amber-800 ring-amber-600/25",
+  tier3: "bg-rose-50 text-rose-800 ring-rose-600/25",
 };
 
 const tierNames: Record<Tier, string> = {
@@ -15,7 +17,7 @@ const tierNames: Record<Tier, string> = {
 export function TierBadge({ tier }: { tier: Tier }) {
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${tierStyles[tier]}`}
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ring-1 ring-inset ${tierStyles[tier]}`}
     >
       🔑 {tierNames[tier]}
     </span>
@@ -23,9 +25,9 @@ export function TierBadge({ tier }: { tier: Tier }) {
 }
 
 const challengeStyles: Record<ChallengeStatus, string> = {
-  open: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30",
-  pending_approval: "bg-indigo-500/15 text-indigo-300 ring-indigo-500/30",
-  claimed: "bg-slate-600/30 text-slate-400 ring-slate-600/40",
+  open: "bg-emerald-50 text-emerald-800 ring-emerald-600/25",
+  pending_approval: "bg-indigo-50 text-indigo-800 ring-indigo-600/25",
+  claimed: "bg-slate-100 text-slate-600 ring-slate-400/40",
 };
 
 const challengeNames: Record<ChallengeStatus, string> = {
@@ -37,7 +39,7 @@ const challengeNames: Record<ChallengeStatus, string> = {
 export function ChallengeStatusBadge({ status }: { status: ChallengeStatus }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${challengeStyles[status]}`}
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ring-1 ring-inset ${challengeStyles[status]}`}
     >
       {challengeNames[status]}
     </span>
@@ -45,17 +47,41 @@ export function ChallengeStatusBadge({ status }: { status: ChallengeStatus }) {
 }
 
 const submissionStyles: Record<SubmissionStatus, string> = {
-  pending: "bg-indigo-500/15 text-indigo-300 ring-indigo-500/30",
-  approved: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30",
-  rejected: "bg-rose-500/15 text-rose-300 ring-rose-500/30",
+  pending: "bg-indigo-50 text-indigo-800 ring-indigo-600/25",
+  approved: "bg-emerald-50 text-emerald-800 ring-emerald-600/25",
+  rejected: "bg-rose-50 text-rose-800 ring-rose-600/25",
 };
 
 export function SubmissionStatusBadge({ status }: { status: SubmissionStatus }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold capitalize ring-1 ${submissionStyles[status]}`}
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold capitalize ring-1 ring-inset ${submissionStyles[status]}`}
     >
       {status}
+    </span>
+  );
+}
+
+export function LivePill({
+  status,
+}: {
+  status: "connecting" | "live" | "offline";
+}) {
+  const live = status === "live";
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ring-1 ring-inset ${
+        live
+          ? "bg-emerald-50 text-emerald-800 ring-emerald-600/25"
+          : "bg-amber-50 text-amber-800 ring-amber-600/25"
+      }`}
+    >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${
+          live ? "bg-emerald-500" : "bg-amber-500"
+        }`}
+      />
+      {live ? "Live" : status === "connecting" ? "Connecting" : "Offline"}
     </span>
   );
 }

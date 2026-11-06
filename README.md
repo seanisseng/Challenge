@@ -103,7 +103,8 @@ clone, copy the matching `.env.example`.
 | File | Variable | Purpose |
 |------|----------|---------|
 | `backend/.env` | `SUPABASE_URL` | project URL |
-| `backend/.env` | `SUPABASE_SERVICE_ROLE_KEY` | server-side key; bypasses RLS |
+| `backend/.env` | `SUPABASE_SECRET_KEY` | `sb_secret_...` server key; bypasses RLS |
+| `backend/.env` | `SUPABASE_SERVICE_ROLE_KEY` | legacy JWT for the same role; either name works |
 | `backend/.env` | `ADMIN_PIN` | the host's PIN - change it before the real game |
 | `frontend/.env` | `VITE_API_BASE_URL` | FastAPI base URL |
 

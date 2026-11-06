@@ -1,37 +1,55 @@
-# Frontend — Scavenger Hunt Dashboard
+# Frontend - Scavenger Hunt Dashboard
 
-Vite + React + TypeScript + Tailwind CSS, talking to Supabase (Auth, Realtime,
-Storage) and the FastAPI backend.
+Vite + React + TypeScript + Tailwind CSS.
+
+The browser talks **only** to the FastAPI backend. It never touches Supabase
+directly, so no Supabase key exists anywhere in this app - which means a
+leaked bundle cannot read the database.
 
 ```
 frontend/
-├── index.html
-├── vite.config.ts
-├── tailwind.config.js
-└── src/
-    ├── main.tsx          React bootstrap
-    ├── App.tsx           app shell (placeholder)
-    ├── index.css         Tailwind + base styles
-    └── lib/supabase.ts   browser Supabase client (RLS-scoped)
+  index.html
+  vite.config.ts
+  tailwind.config.js
+  src/
+    main.tsx              React bootstrap
+    App.tsx               route switch + session restore
+    index.css             Tailwind + base styles
+    lib/
+      api.ts              fetch wrapper, token storage, endpoint helpers
+      types.ts            payload types mirroring backend snapshots
+      router.ts           tiny history-API router
+      useLive.ts          WebSocket hook with reconnect + heartbeat
+    components/
+      Badges.tsx          tier / challenge / submission pills
+    screens/
+      JoinScreen.tsx      team code + player name
+      TeamDashboard.tsx   live board, clues, rival progress
+      AdminLogin.tsx      PIN entry
+      AdminConsole.tsx    sessions, codes, review, content, progress
 ```
+
+## Screens
+
+| Route | Screen | What it does |
+|-------|--------|--------------|
+| `/` | Join | Enter a team code and your name; a stored token rejoins silently on reload |
+| `/` | Team dashboard | Live board with photo submission, own clues by tier, rival clue counts |
+| `/admin` | PIN login | Exchanges the PIN for the admin token |
+| `/admin` | Console | Create sessions, read out team codes, approve/reject proofs, add clues and challenges, watch progress |
 
 ## Setup
 
 ```powershell
 cd frontend
 npm install
-copy .env.example .env    # VITE_* keys from the Supabase dashboard
+copy .env.example .env
 npm run dev               # http://localhost:5173
 ```
 
-Fill `.env` with the **anon / publishable** key only — never the service-role
-key (it must stay server-side).
-
 | Variable | Purpose |
 |----------|---------|
-| `VITE_SUPABASE_URL` | Supabase API URL |
-| `VITE_SUPABASE_ANON_KEY` | RLS-scoped publishable key |
-| `VITE_API_BASE_URL` | FastAPI base URL |
+| `VITE_API_BASE_URL` | FastAPI base URL (default `http://localhost:8000`) |
 
 ## Scripts
 
@@ -42,12 +60,24 @@ key (it must stay server-side).
 | `npm run preview` | Preview the production build |
 | `npm run typecheck` | `tsc --noEmit` |
 
-## Notes
+## How live updates work
 
-The client in `src/lib/supabase.ts` runs every query as the signed-in user, so
-Row Level Security applies automatically. Teams sign in anonymously, then call
-the `join_session` / `submit_proof` RPCs; the live board and unlocked clues
-update via Supabase Realtime subscriptions.
+`useLive.ts` opens one WebSocket per device: `?token=<team token>` for players,
+`?admin_token=<token>&session_id=<id>` for the console. The backend sends a
+complete snapshot on connect and again after every mutation, so the client
+never polls and never merges diffs - each message just replaces state.
 
-> The dashboard UI (join screen, live board, clue inventory, admin review
-> console) is the next milestone. `App.tsx` is currently a placeholder shell.
+If the socket drops, the hook reconnects with exponential backoff and shows
+`Offline` in the header. A manual **Refresh** button re-fetches `/api/state` as
+a fallback.
+
+## Credentials in the browser
+
+- The team token is a UUID in `localStorage` (`challenge.team-token`). It is
+  the device's identity; "Leave" clears it.
+- The admin token is in `localStorage` (`challenge.admin-token`) and is only
+  ever obtained by typing the PIN. Signing out clears both it and the last
+  selected session.
+
+Neither token grants direct database access - both are checked by the backend
+on every request.

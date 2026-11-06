@@ -10,6 +10,37 @@ from __future__ import annotations
 from typing import Any
 
 from app import repo
+from app.config import get_settings
+
+# Deploy-time values that live in challenge copy. `{{phone}}` is replaced from
+# CONTACT_PHONE so the host's number never reaches git or Postgres.
+PHONE_PLACEHOLDER = "{{phone}}"
+PHONE_FALLBACK = "the number your station leader gives you"
+
+
+def fill_placeholders(text: str | None) -> str | None:
+    """Swap deploy-time tokens for their configured values.
+
+    If CONTACT_PHONE is unset the sentence still reads correctly, rather than
+    showing a raw `{{phone}}` token to players.
+    """
+    if not text or PHONE_PLACEHOLDER not in text:
+        return text
+    phone = get_settings().contact_phone.strip()
+    return text.replace(PHONE_PLACEHOLDER, phone or PHONE_FALLBACK)
+
+
+def _render_challenge(challenge: dict[str, Any]) -> dict[str, Any]:
+    """Apply placeholders to the fields a player actually reads."""
+    return {
+        **challenge,
+        "title": fill_placeholders(challenge.get("title")),
+        "location_area": fill_placeholders(challenge.get("location_area")),
+        "completion_condition": fill_placeholders(
+            challenge.get("completion_condition")
+        ),
+    }
+
 
 
 def _board_with_my_status(
@@ -53,7 +84,7 @@ def session_core(session_id: str) -> dict[str, Any]:
             "team_count": session["team_count"],
             "active_task_limit": session["active_task_limit"],
         },
-        "board": repo.active_challenges(session_id),
+        "board": [_render_challenge(c) for c in repo.active_challenges(session_id)],
         "progress": repo.progress(session_id),
     }
 
