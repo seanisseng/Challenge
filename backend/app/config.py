@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     # identity with a per-team join code, the admin proves it with this PIN.
     admin_pin: str = ""
     proof_bucket: str = "challenge-proofs"
+    asset_bucket: str = "challenge-assets"
     max_upload_bytes: int = 25 * 1024 * 1024
 
     # --- Game content -------------------------------------------------------

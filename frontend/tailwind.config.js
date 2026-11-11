@@ -4,17 +4,18 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Indigo-600 on white sits at ~6.5:1, so it is safe for both solid
-        // buttons (white text on brand) and for brand-coloured text.
+        ink: "rgb(var(--race-ink) / <alpha-value>)",
+        paper: "rgb(var(--race-paper) / <alpha-value>)",
         brand: {
-          DEFAULT: "#4f46e5",
-          50: "#eef2ff",
-          100: "#e0e7ff",
-          200: "#c7d2fe",
-          700: "#4338ca",
-          dark: "#4338ca",
+          DEFAULT: "rgb(var(--race-orange) / <alpha-value>)",
+          50: "rgb(var(--race-orange-tint) / <alpha-value>)",
+          100: "rgb(var(--race-orange-tint) / <alpha-value>)",
+          200: "rgb(var(--race-orange) / <alpha-value>)",
+          700: "rgb(var(--race-orange-text) / <alpha-value>)",
+          dark: "rgb(var(--race-orange-pressed) / <alpha-value>)",
         },
       },
+      fontFamily: { display: ["Barlow Condensed", "Arial Narrow", "sans-serif"] },
       boxShadow: {
         card: "0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06)",
       },

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from uuid import UUID
 from pydantic import BaseModel, Field
 
 
@@ -26,6 +27,11 @@ class JoinRequest(BaseModel):
 
 class ReviewRequest(BaseModel):
     note: str | None = Field(default=None, max_length=280)
+
+
+class ReorderQueueRequest(BaseModel):
+    challenge_ids: list[UUID] = Field(max_length=500)
+    expected_ids: list[UUID] = Field(max_length=500)
 
 
 class ChallengeCreateRequest(BaseModel):

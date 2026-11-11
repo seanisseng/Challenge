@@ -8,8 +8,10 @@ on the birthday and rock-statue challenges, so the rest were assigned by effort
 and distance: **Tier 1** = quick and doable anywhere, **Tier 2** = needs a
 specific place or a bit of nerve, **Tier 3** = long, physical, or location-locked.
 
-`#` is `sort_order`. It deliberately interleaves tiers so the six live
-challenges on the board are always a mix of all three.
+`#` is the initial `sort_order`. It interleaves tiers so the opening six
+challenges include all three tiers. Admins can change the order from the Board
+tab by dragging queued challenges. × removes a queued or live challenge from
+that session permanently; it will not return to the deck.
 
 The **Name** column becomes `challenges.title`; **Complete when** becomes
 `completion_condition`. Names are the hook, the condition is the rule.

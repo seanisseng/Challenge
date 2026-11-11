@@ -1,87 +1,36 @@
+import { Check, ChevronRight, Circle, Clock3, LoaderCircle, WifiOff, X } from "lucide-react";
 import type { ChallengeStatus, SubmissionStatus, Tier } from "../lib/types";
 
-// Every badge pairs a very light tint with a dark, saturated foreground, which
-// keeps them readable at a glance in bright outdoor light.
-const tierStyles: Record<Tier, string> = {
-  tier1: "bg-sky-50 text-sky-800 ring-sky-600/25",
-  tier2: "bg-amber-50 text-amber-800 ring-amber-600/25",
-  tier3: "bg-rose-50 text-rose-800 ring-rose-600/25",
-};
-
-const tierNames: Record<Tier, string> = {
-  tier1: "Tier 1",
-  tier2: "Tier 2",
-  tier3: "Tier 3",
-};
-
 export function TierBadge({ tier }: { tier: Tier }) {
+  const number = Number(tier.slice(-1));
   return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ring-1 ring-inset ${tierStyles[tier]}`}
-    >
-      🔑 {tierNames[tier]}
+    <span className={`tier-stamp tier-stamp--${tier}`} aria-label={`Tier ${number}`}>
+      <span className="tier-stamp-number" aria-hidden="true">{number}</span>
+      <span className="tier-stamp-copy"><span>TIER {number}</span>
+        <span className="tier-chevron" aria-hidden="true">{Array.from({ length: number }, (_, i) => <ChevronRight key={i} size={10} strokeWidth={3} />)}</span>
+      </span>
     </span>
   );
 }
-
-const challengeStyles: Record<ChallengeStatus, string> = {
-  open: "bg-emerald-50 text-emerald-800 ring-emerald-600/25",
-  pending_approval: "bg-indigo-50 text-indigo-800 ring-indigo-600/25",
-  claimed: "bg-slate-100 text-slate-600 ring-slate-400/40",
-};
-
-const challengeNames: Record<ChallengeStatus, string> = {
-  open: "Open",
-  pending_approval: "Pending approval",
-  claimed: "Claimed",
-};
 
 export function ChallengeStatusBadge({ status }: { status: ChallengeStatus }) {
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ring-1 ring-inset ${challengeStyles[status]}`}
-    >
-      {challengeNames[status]}
-    </span>
-  );
+  const Icon = status === "claimed" ? Check : status === "pending_approval" ? Clock3 : Circle;
+  return <span className={`race-status race-status--${status === "claimed" ? "done" : status === "pending_approval" ? "pending" : "open"}`}>
+    <Icon size={13} aria-hidden="true" />{status === "claimed" ? "Done" : status === "pending_approval" ? "Pending" : "Open"}
+  </span>;
 }
-
-const submissionStyles: Record<SubmissionStatus, string> = {
-  pending: "bg-indigo-50 text-indigo-800 ring-indigo-600/25",
-  approved: "bg-emerald-50 text-emerald-800 ring-emerald-600/25",
-  rejected: "bg-rose-50 text-rose-800 ring-rose-600/25",
-};
 
 export function SubmissionStatusBadge({ status }: { status: SubmissionStatus }) {
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold capitalize ring-1 ring-inset ${submissionStyles[status]}`}
-    >
-      {status}
-    </span>
-  );
+  const Icon = status === "approved" ? Check : status === "rejected" ? X : Clock3;
+  return <span className={`race-status race-status--${status === "approved" ? "done" : status === "rejected" ? "rejected" : "pending"}`}>
+    <Icon size={13} aria-hidden="true" />{status === "approved" ? "Approved" : status === "rejected" ? "Rejected" : "Pending"}
+  </span>;
 }
 
-export function LivePill({
-  status,
-}: {
-  status: "connecting" | "live" | "offline";
-}) {
-  const live = status === "live";
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ring-1 ring-inset ${
-        live
-          ? "bg-emerald-50 text-emerald-800 ring-emerald-600/25"
-          : "bg-amber-50 text-amber-800 ring-amber-600/25"
-      }`}
-    >
-      <span
-        className={`h-1.5 w-1.5 rounded-full ${
-          live ? "bg-emerald-500" : "bg-amber-500"
-        }`}
-      />
-      {live ? "Live" : status === "connecting" ? "Connecting" : "Offline"}
-    </span>
-  );
+export function LivePill({ status }: { status: "connecting" | "live" | "offline" }) {
+  return <span className={`connection-indicator connection-indicator--${status}`} role="status">
+    {status === "live" ? <span className="live-dot" aria-hidden="true" />
+      : status === "offline" ? <WifiOff size={14} aria-hidden="true" /> : <LoaderCircle className="race-spinner" size={14} aria-hidden="true" />}
+    {status === "live" ? "Live connection" : status === "offline" ? "Offline" : "Connecting"}
+  </span>;
 }

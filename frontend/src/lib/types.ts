@@ -17,6 +17,8 @@ export interface SessionInfo {
   status: SessionStatus;
   team_count: number;
   active_task_limit: number;
+  board_visible: boolean;
+  board_reveal_version: number;
 }
 
 export interface SubmissionSummary {
@@ -31,6 +33,7 @@ export interface Challenge {
   title: string;
   location_area: string | null;
   completion_condition: string;
+  image_url: string | null;
   clue_tier: Tier;
   status: ChallengeStatus;
   claimed_by_team_id: string | null;
@@ -106,6 +109,7 @@ export interface AdminState {
   kind: "admin";
   session: SessionInfo;
   board: Challenge[];
+  queue: Challenge[];
   progress: TeamProgress[];
   teams: AdminTeam[];
   submissions: AdminSubmission[];

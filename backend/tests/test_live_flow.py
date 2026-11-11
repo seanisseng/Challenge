@@ -69,6 +69,9 @@ def test_full_game_flow() -> None:
 
     try:
         assert len(teams) == 2
+        # This test builds a tiny custom pool; normal games now start with 29.
+        assert len(get_admin_client().table("challenges").select("id").eq("session_id", session_id).execute().data) == 29
+        get_admin_client().table("challenges").delete().eq("session_id", session_id).execute()
         codes = {team["join_code"] for team in teams}
         assert len(codes) == 2, "each team must get its own code"
 
@@ -183,6 +186,9 @@ def test_full_game_flow() -> None:
             json={"note": "nice banana"},
         )
         assert approved.status_code == 200, approved.text
+        assert client.post(
+            f"/api/admin/sessions/{session_id}/challenges/{challenge_id}/discard", headers=admin
+        ).status_code == 400
 
         # --- the winner unlocks a clue, the loser is auto-rejected ---------
         alice_state = client.get("/api/state", headers=alice_headers).json()

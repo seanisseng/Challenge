@@ -1,8 +1,9 @@
 /**
  * Thin fetch wrapper around the FastAPI backend.
  *
- * The browser never talks to Supabase. Every read and write goes through the
- * backend, which holds the service-role key. Identity travels in a header:
+ * Game data reads and writes go through the backend, which holds the
+ * service-role key. Reference photos load from public storage URLs.
+ * Identity travels in a header:
  * `X-Team-Token` for players, `X-Admin-Token` for the host.
  */
 
@@ -219,6 +220,28 @@ export function startSession(sessionId: string): Promise<{ ok: boolean }> {
   });
 }
 
+export function setBoardVisibility(sessionId: string, visible: boolean): Promise<{ ok: boolean }> {
+  return request(`/api/admin/sessions/${sessionId}/board/${visible ? "reveal" : "hide"}`, {
+    method: "POST",
+  });
+}
+
+export function deferChallenge(sessionId: string, challengeId: string): Promise<{ ok: boolean }> {
+  return request(`/api/admin/sessions/${sessionId}/challenges/${challengeId}/defer`, {
+    method: "POST",
+  });
+}
+
+export function discardChallenge(sessionId: string, challengeId: string): Promise<{ ok: boolean }> {
+  return request(`/api/admin/sessions/${sessionId}/challenges/${challengeId}/discard`, { method: "POST" });
+}
+
+export function reorderQueue(sessionId: string, challengeIds: string[], expectedIds: string[]): Promise<{ ok: boolean }> {
+  return request(`/api/admin/sessions/${sessionId}/queue/reorder`, {
+    method: "POST", body: { challenge_ids: challengeIds, expected_ids: expectedIds },
+  });
+}
+
 export function endSession(sessionId: string): Promise<{ ok: boolean }> {
   return request<{ ok: boolean }>(`/api/admin/sessions/${sessionId}/end`, {
     method: "POST",
@@ -260,10 +283,23 @@ export function addChallenge(
     clue_tier: Tier;
     sort_order: number;
   },
-): Promise<unknown> {
-  return request(`/api/admin/sessions/${sessionId}/challenges`, {
+): Promise<{ id: string }> {
+  return request<{ id: string }>(`/api/admin/sessions/${sessionId}/challenges`, {
     method: "POST",
     body: input,
+  });
+}
+
+export function uploadChallengeImage(
+  sessionId: string,
+  challengeId: string,
+  file: File,
+): Promise<{ ok: boolean; image_url: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  return request(`/api/admin/sessions/${sessionId}/challenges/${challengeId}/image`, {
+    method: "POST",
+    formData: form,
   });
 }
 

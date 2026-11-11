@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import secrets
+import asyncio
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 
 from app import repo, snapshots
 from app.config import get_settings
@@ -16,6 +17,7 @@ from app.models import (
     ChallengeCreateRequest,
     ClueCreateRequest,
     ReviewRequest,
+    ReorderQueueRequest,
     SessionCreateRequest,
 )
 from app.realtime import hub
@@ -69,9 +71,7 @@ def session_state(session_id: str) -> dict[str, Any]:
 
 @router.post("/sessions/{session_id}/start")
 def start_session(session_id: str, background: BackgroundTasks) -> dict[str, Any]:
-    repo.get_session(session_id)
-    repo.start_board(session_id)
-    repo.set_session_status(session_id, "active")
+    repo.set_board_visibility(session_id, True)
     background.add_task(hub.broadcast, session_id)
     return {"ok": True}
 
@@ -87,6 +87,41 @@ def end_session(session_id: str, background: BackgroundTasks) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # content
 # --------------------------------------------------------------------------- #
+@router.post("/sessions/{session_id}/board/reveal")
+def reveal_board(session_id: str, background: BackgroundTasks) -> dict[str, Any]:
+    repo.set_board_visibility(session_id, True)
+    background.add_task(hub.broadcast, session_id)
+    return {"ok": True}
+
+
+@router.post("/sessions/{session_id}/board/hide")
+def hide_board(session_id: str, background: BackgroundTasks) -> dict[str, Any]:
+    repo.set_board_visibility(session_id, False)
+    background.add_task(hub.broadcast, session_id)
+    return {"ok": True}
+
+
+@router.post("/sessions/{session_id}/challenges/{challenge_id}/defer")
+def defer_challenge(session_id: str, challenge_id: str, background: BackgroundTasks) -> dict[str, Any]:
+    repo.defer_challenge(session_id, challenge_id)
+    background.add_task(hub.broadcast, session_id)
+    return {"ok": True}
+
+
+@router.post("/sessions/{session_id}/challenges/{challenge_id}/discard")
+def discard_challenge(session_id: str, challenge_id: str, background: BackgroundTasks) -> dict[str, Any]:
+    repo.discard_challenge(session_id, challenge_id)
+    background.add_task(hub.broadcast, session_id)
+    return {"ok": True}
+
+
+@router.post("/sessions/{session_id}/queue/reorder")
+def reorder_queue(session_id: str, payload: ReorderQueueRequest, background: BackgroundTasks) -> dict[str, Any]:
+    repo.reorder_queue(session_id, [str(i) for i in payload.challenge_ids], [str(i) for i in payload.expected_ids])
+    background.add_task(hub.broadcast, session_id)
+    return {"ok": True}
+
+
 @router.post("/sessions/{session_id}/challenges")
 def add_challenge(
     session_id: str, payload: ChallengeCreateRequest, background: BackgroundTasks
@@ -105,6 +140,33 @@ def add_challenge(
     repo.refill_board(session_id)
     background.add_task(hub.broadcast, session_id)
     return challenge
+
+
+@router.post("/sessions/{session_id}/challenges/{challenge_id}/image")
+async def upload_challenge_image(
+    session_id: str,
+    challenge_id: str,
+    background: BackgroundTasks,
+    file: UploadFile = File(...),
+) -> dict[str, Any]:
+    challenge = await asyncio.to_thread(repo.get_challenge, challenge_id)
+    if challenge["session_id"] != session_id:
+        raise HTTPException(status_code=404, detail="challenge not found")
+    content_type = (file.content_type or "").lower()
+    if content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(status_code=415, detail="reference photos must be JPEG, PNG or WebP")
+    limit = min(get_settings().max_upload_bytes, 10 * 1024 * 1024)
+    data = await file.read(limit + 1)
+    if not data:
+        raise HTTPException(status_code=400, detail="empty file")
+    if len(data) > limit:
+        raise HTTPException(status_code=413, detail=f"reference photo exceeds the {limit}-byte limit")
+    path = await asyncio.to_thread(
+        repo.upload_challenge_image, session_id, file.filename or "reference.jpg", data, content_type
+    )
+    await asyncio.to_thread(repo.set_challenge_image, challenge_id, path)
+    background.add_task(hub.broadcast, session_id)
+    return {"ok": True, "image_url": repo.public_asset_url(path)}
 
 
 @router.post("/sessions/{session_id}/clues")

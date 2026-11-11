@@ -295,8 +295,15 @@ end;
 $$;
 
 -- --- Grants -----------------------------------------------------------------
-grant execute on function public.join_session(text, text)      to authenticated;
-grant execute on function public.submit_proof(uuid, text, text) to authenticated;
-grant execute on function public.approve_submission(uuid, text) to authenticated;
-grant execute on function public.reject_submission(uuid, text)  to authenticated;
-grant execute on function public.refill_board(uuid)             to authenticated;
+-- Keep fresh installs backend-only, including before the identity rewrite.
+revoke execute on function public.join_session(text, text) from public, anon, authenticated;
+revoke execute on function public.submit_proof(uuid, text, text) from public, anon, authenticated;
+revoke execute on function public.approve_submission(uuid, text) from public, anon, authenticated;
+revoke execute on function public.reject_submission(uuid, text) from public, anon, authenticated;
+revoke execute on function public.refill_board(uuid) from public, anon, authenticated;
+
+grant execute on function public.join_session(text, text) to service_role;
+grant execute on function public.submit_proof(uuid, text, text) to service_role;
+grant execute on function public.approve_submission(uuid, text) to service_role;
+grant execute on function public.reject_submission(uuid, text) to service_role;
+grant execute on function public.refill_board(uuid) to service_role;

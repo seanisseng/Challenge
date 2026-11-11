@@ -8,6 +8,7 @@ the caller's team is always resolved from a member token first.
 from __future__ import annotations
 
 import uuid
+from urllib.parse import quote
 from datetime import datetime, timezone
 from typing import Any
 
@@ -38,7 +39,7 @@ def _clean_message(message: str) -> str:
 def _to_http(exc: APIError) -> HTTPException:
     message = getattr(exc, "message", None) or str(exc)
     code = getattr(exc, "code", None)
-    status = 409 if code == "23505" else 400
+    status = 409 if code in {"23505", "PT409"} else 400
     return HTTPException(status_code=status, detail=_clean_message(message))
 
 
@@ -101,6 +102,7 @@ def set_session_status(session_id: str, status: str) -> None:
         payload["started_at"] = now
     elif status == "ended":
         payload["ended_at"] = now
+        payload["board_visible"] = False
     try:
         _select("game_sessions").update(payload).eq("id", session_id).execute()
     except APIError as exc:
@@ -196,10 +198,11 @@ def active_challenges(session_id: str) -> list[dict[str, Any]]:
         _select("challenges")
         .select(
             "id,title,location_area,completion_condition,clue_tier,status,"
-            "claimed_by_team_id,sort_order,updated_at"
+            "claimed_by_team_id,sort_order,updated_at,image_path"
         )
         .eq("session_id", session_id)
         .eq("is_active", True)
+        .eq("is_discarded", False)
         .order("sort_order")
         .execute()
         .data
@@ -215,6 +218,37 @@ def all_challenges(session_id: str) -> list[dict[str, Any]]:
         .execute()
         .data
     )
+
+
+def queued_challenges(session_id: str) -> list[dict[str, Any]]:
+    return (
+        _select("challenges").select(
+            "id,title,location_area,completion_condition,clue_tier,status,"
+            "claimed_by_team_id,sort_order,updated_at,image_path"
+        )
+        .eq("session_id", session_id).eq("is_active", False)
+        .eq("is_discarded", False).eq("status", "open")
+        .order("sort_order").order("created_at")
+        .execute().data
+    )
+
+
+def set_board_visibility(session_id: str, visible: bool) -> None:
+    rpc("set_board_visibility", {"p_session_id": session_id, "p_visible": visible})
+
+
+def defer_challenge(session_id: str, challenge_id: str) -> None:
+    rpc("defer_challenge", {"p_session_id": session_id, "p_challenge_id": challenge_id})
+
+
+def discard_challenge(session_id: str, challenge_id: str) -> None:
+    rpc("discard_challenge", {"p_session_id": session_id, "p_challenge_id": challenge_id})
+
+
+def reorder_queue(session_id: str, challenge_ids: list[str], expected_ids: list[str]) -> None:
+    rpc("reorder_challenge_queue", {
+        "p_session_id": session_id, "p_challenge_ids": challenge_ids, "p_expected_ids": expected_ids,
+    })
 
 
 def team_submissions(team_id: str) -> list[dict[str, Any]]:
@@ -398,6 +432,7 @@ def create_challenge(
     completion_condition: str,
     clue_tier: str,
     sort_order: int,
+    image_path: str | None = None,
 ) -> dict[str, Any]:
     try:
         rows = (
@@ -410,6 +445,7 @@ def create_challenge(
                     "completion_condition": completion_condition,
                     "clue_tier": clue_tier,
                     "sort_order": sort_order,
+                    "image_path": image_path,
                 }
             )
             .execute()
@@ -418,6 +454,20 @@ def create_challenge(
     except APIError as exc:
         raise _to_http(exc) from exc
     return rows[0]
+
+
+def get_challenge(challenge_id: str) -> dict[str, Any]:
+    rows = _select("challenges").select("*").eq("id", challenge_id).limit(1).execute().data
+    if not rows:
+        raise HTTPException(status_code=404, detail="challenge not found")
+    return rows[0]
+
+
+def set_challenge_image(challenge_id: str, path: str) -> None:
+    try:
+        _select("challenges").update({"image_path": path}).eq("id", challenge_id).execute()
+    except APIError as exc:
+        raise _to_http(exc) from exc
 
 
 def create_clue(
@@ -474,6 +524,31 @@ def refill_board(session_id: str) -> None:
 # --------------------------------------------------------------------------- #
 # storage
 # --------------------------------------------------------------------------- #
+def public_asset_url(path: str | None) -> str | None:
+    if not path:
+        return None
+    settings = get_settings()
+    return (
+        f"{settings.supabase_url.rstrip('/')}/storage/v1/object/public/"
+        f"{quote(settings.asset_bucket, safe='')}/{quote(path, safe='/')}"
+    )
+
+
+def upload_challenge_image(
+    session_id: str, filename: str, data: bytes, content_type: str
+) -> str:
+    # Derive extensions from the allowed MIME type, never from an uploaded name.
+    extension = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}[content_type]
+    path = f"{session_id}/{uuid.uuid4().hex}{extension}"
+    try:
+        _client().storage.from_(get_settings().asset_bucket).upload(
+            path, data, {"content-type": content_type, "upsert": "false"}
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="image upload failed") from exc
+    return path
+
+
 def upload_proof(session_id: str, team_id: str, filename: str, data: bytes, content_type: str) -> str:
     settings = get_settings()
     safe = f"{uuid.uuid4().hex}{filename[filename.rfind('.'):] if '.' in filename else '.jpg'}"
@@ -482,7 +557,7 @@ def upload_proof(session_id: str, team_id: str, filename: str, data: bytes, cont
         _client().storage.from_(settings.proof_bucket).upload(
             path,
             data,
-            {"contentType": content_type, "upsert": "false"},
+            {"content-type": content_type, "upsert": "false"},
         )
     except Exception as exc:  # storage3 raises its own errors
         raise HTTPException(status_code=400, detail=f"upload failed: {exc}") from exc

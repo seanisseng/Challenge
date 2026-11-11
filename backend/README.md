@@ -28,15 +28,15 @@ backend/
 
 ## Running the database
 
-The database is **hosted on Supabase Cloud** - project `zrfilmdzczsgfzmhfgbd`
-("Game 2 Challenge", `eu-north-1`, Postgres 17). There is no local database
+The database is **hosted on Supabase Cloud** - project `ceqfgjqwvuqhtsbmxfdn`
+("Game 2 Challenge", `ap-southeast-1`, Postgres 17). There is no local database
 container; nothing here needs Docker or the Supabase CLI.
 
 Connection details live in `backend/.env`:
 
 | Variable | Used for |
 |----------|----------|
-| `SUPABASE_URL` | `https://zrfilmdzczsgfzmhfgbd.supabase.co` |
+| `SUPABASE_URL` | `https://ceqfgjqwvuqhtsbmxfdn.supabase.co` |
 | `SUPABASE_SECRET_KEY` | new-style `sb_secret_...` key - the only key the backend uses; bypasses RLS |
 | `SUPABASE_SERVICE_ROLE_KEY` | legacy `eyJ...` JWT with the same privileges; either name works |
 | `DATABASE_URL` | direct Postgres connection for `psql` / migration tooling |
@@ -133,12 +133,16 @@ All are `SECURITY DEFINER` and executable only by `service_role`.
 | RPC | Effect |
 |-----|--------|
 | `generate_join_code()` | 6 chars from a 32-char alphabet with no `0/O/1/I/L` |
-| `create_session(name, team_count, task_limit?, room_code?)` | Creates a session plus `team_count` team slots, each with a unique code |
+| `create_session(name, team_count, task_limit?, room_code?)` | Creates team slots and a hidden, prepopulated challenge board |
 | `join_team(join_code, member_name)` | Redeems a code + name, returns that device's member token |
 | `submit_proof(team_id, member_id, challenge_id, photo_path, photo_url?)` | Creates a pending submission |
 | `approve_submission(submission_id, note?)` | Claims the challenge, grants the clue, rejects rivals, refills |
 | `reject_submission(submission_id, note?)` | Rejects; reopens the board if it was the last pending |
 | `refill_board(session_id)` | Retires claimed challenges, activates pool up to `active_task_limit` |
+| `set_board_visibility(session_id, visible)` | Reveal/start the board or hide it without losing the preview |
+| `discard_challenge(session_id, challenge_id)` | Permanently remove for this session, reject pending proofs and refill |
+| `reorder_challenge_queue(session_id, ids, expected_ids)` | Save a complete queue order; reject stale or invalid orders |
+| `defer_challenge(session_id, challenge_id)` | Legacy alias for session-local removal |
 
 ## API surface
 
@@ -152,6 +156,11 @@ Team endpoints take `X-Team-Token`; admin endpoints take `X-Admin-Token`
 | `POST` | `/api/admin/sessions` | admin | Create a session + team codes |
 | `GET` | `/api/admin/sessions/{id}/state` | admin | Full console snapshot |
 | `POST` | `/api/admin/sessions/{id}/start` | admin | Activate the board, go live |
+| `POST` | `/api/admin/sessions/{id}/board/reveal` | admin | Reveal the prepared board; starts a lobby game |
+| `POST` | `/api/admin/sessions/{id}/board/hide` | admin | Hide challenges from teams and block new proofs |
+| `POST` | `/api/admin/sessions/{id}/challenges/{challenge_id}/discard` | admin | Remove a queued or live challenge for this game |
+| `POST` | `/api/admin/sessions/{id}/queue/reorder` | admin | Save queue order with stale-order protection |
+| `POST` | `/api/admin/sessions/{id}/challenges/{challenge_id}/defer` | admin | Legacy alias for removal |
 | `POST` | `/api/admin/sessions/{id}/end` | admin | End the game |
 | `POST` | `/api/admin/sessions/{id}/challenges` | admin | Add a challenge (goes live if there is room) |
 | `GET`/`POST` | `/api/admin/sessions/{id}/clues` | admin | List / add clues |
@@ -178,8 +187,9 @@ filtering instead. The trade-off is that the API must run as a single process
 (no horizontal scaling) and a restart drops sockets, which the client handles
 by reconnecting with backoff.
 
-Photos are never in the broadcast payload; the admin fetches a signed URL on
-demand from `/api/admin/submissions/{id}/photo`.
+Proof photos are never in the broadcast payload; the admin fetches a signed URL
+on demand from `/api/admin/submissions/{id}/photo`. Challenge reference images
+are public game assets; their stable `image_url` is included in board snapshots.
 
 ## Storage
 
@@ -192,6 +202,71 @@ Bucket **`challenge-proofs`** (private, 25 MiB, images only). Path convention:
 Nothing is reachable directly: anon and authenticated have no `storage.objects`
 grants. The backend uploads with the service-role key and mints short-lived
 signed URLs for the admin console.
+
+Bucket **`challenge-assets`** holds optional challenge reference photos (public
+read, 10 MiB per image, JPEG / PNG / WebP). Only the backend service role can
+write. `challenges.image_path` stores an object key; snapshots derive the public
+URL. See [Supabase public bucket access](https://supabase.com/docs/guides/storage/buckets/fundamentals).
+
+Reference photos come with the built-in challenge pool. The replacement upload route is
+`POST /api/admin/sessions/{session_id}/challenges/{challenge_id}/image`, with an
+admin token and multipart `file`. It validates ownership, MIME type, emptiness,
+and the smaller of `MAX_UPLOAD_BYTES` and 10 MiB, then broadcasts the new URL.
+Missing reference photos are hidden gracefully on both boards. Uploading a new
+image replaces the challenge's reference; previous objects remain in storage.
+
+## Admin board controls
+
+Every new session receives the 29 built-in challenges from `challenge_templates`.
+Its opening board is prepared immediately but hidden from teams. Migration 0014
+also prepares existing lobby boards and fills existing empty lobby pools.
+The Content tab is replaced by a Board view and a separate Clues tab.
+
+- **Reveal Board** starts a lobby session and shows the prepared challenges to teams.
+- **Hide Board** removes challenges from team snapshots and blocks submissions.
+  The admin preview, queue, existing reviews and unlocked clues remain available.
+- **×** on either a queued or live challenge removes it for the rest of that
+  session. It cannot return through a refill, reorder or hide/reveal cycle.
+  Removing a live challenge rejects all its pending submissions with a visible
+  explanation, records review events and brings in the next eligible challenge.
+  Previously rejected proofs cannot later win approval. Claimed challenges and
+  ended games cannot be moved.
+- The queue shows the next six challenges with an option to show all. Queue
+  details are included only in admin snapshots. Drag a grip using mouse or touch
+  to reorder; dropping saves once. Arrow buttons and arrow keys on the grip
+  provide the same control without dragging. Escape or an interrupted drag
+  cancels the preview. The queue scrolls as a dragged card approaches a viewport
+  edge. Concurrent queue changes cancel a drag or reject a stale save with HTTP
+  409 so another host's order is not silently overwritten.
+
+Removed rows and submission history are retained with `is_discarded = true`.
+New sessions copy fresh catalog rows, so removal affects only the current game.
+
+The database enforces visibility, active-board membership and session ownership;
+stale clients cannot submit to a hidden or moved challenge. Catalog templates
+are service-role-only, and reuse the existing public reference object keys.
+Changes to the built-in pool should update the canonical challenge file and use
+a new migration to update `challenge_templates` for future sessions.
+
+### Game2 content and reference photos
+
+1. Apply `supabase/migrations/20260101000013_challenge_images.sql` in the SQL editor
+   or with `psql` against the hosted database.
+2. Apply `supabase/seed_challenges.sql`. It locks room `95Q2X3`, inserts the 29
+   canonical challenges only if the pool is empty, and leaves them inactive.
+   It does not create clues; add the real clues in the admin console before play.
+3. With a working service key in `backend/.env`, run from `backend/`:
+
+   ```powershell
+   .\.venv\Scripts\python.exe scripts/upload_challenge_assets.py --dry-run
+   .\.venv\Scripts\python.exe scripts/upload_challenge_assets.py
+   ```
+
+The script checks that each local `challenges/challenge<N>.jpg` matches exactly
+one row by `sort_order`, then upserts `{session_id}/challenge<N>.jpg` and links it
+to that challenge. Run it before starting the hunt; a running UI refreshes on
+its next snapshot. Reruns repair missing uploads without duplicating challenges.
+For another session, pass `--room-code CODE` and optionally `--folder PATH`.
 
 ## Migrations
 
@@ -211,6 +286,11 @@ Timestamp-prefixed SQL in `supabase/migrations/`:
 | `*_0010_drop_legacy_auth_functions` | removes the dead auth-flavoured overloads |
 | `*_0011_fix_create_session_ambiguity` | fixes the `room_code` OUT-parameter collision |
 | `*_0012_member_name_case_insensitive` | unique `(team_id, lower(name))` |
+| `*_0013_challenge_images` | optional reference image key + public assets bucket |
+| `*_0014_board_controls` | built-in catalog, hidden preview, visibility and queue controls |
+| `*_0015_board_reveal_events` | durable reveal identity for the player card-flop animation |
+| `*_0016_queue_order_and_discards` | session-local removal, eligible-only refill and queue reordering |
+| `*_0017_queue_conflict_response` | explicit HTTP conflict response for stale queue saves |
 
 To change the schema, add a new timestamped file to `supabase/migrations/` and
 apply it to the project (SQL editor, `psql $DATABASE_URL`, or the Supabase MCP

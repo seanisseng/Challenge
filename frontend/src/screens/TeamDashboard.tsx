@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { CardTable } from "../components/CardTable";
 
 import {
-  ChallengeStatusBadge,
   LivePill,
   TierBadge,
 } from "../components/Badges";
@@ -13,7 +13,7 @@ import {
   teamSocketUrl,
 } from "../lib/api";
 import { TIER_HINT, TIER_LABEL } from "../lib/types";
-import type { Challenge, TeamState, Tier } from "../lib/types";
+import type { TeamState, Tier } from "../lib/types";
 import { useLiveSocket } from "../lib/useLive";
 
 const TIERS: Tier[] = ["tier1", "tier2", "tier3"];
@@ -28,11 +28,22 @@ export default function TeamDashboard({ initialState, onLeave }: Props) {
   const [state, setState] = useState<TeamState>(initialState);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mobileTab, setMobileTab] = useState<"board" | "clues" | "teams">("board");
+  const revealVersion = useRef(initialState.session.board_reveal_version);
+
+  const applySnapshot = (snapshot: TeamState) => {
+    // Bring connected phone users to the table for a new host reveal.
+    if (snapshot.session.board_visible && snapshot.session.board_reveal_version !== revealVersion.current) {
+      setMobileTab("board");
+    }
+    revealVersion.current = snapshot.session.board_reveal_version;
+    setState(snapshot);
+  };
 
   const status = useLiveSocket<TeamState>(
     token ? teamSocketUrl(token) : null,
     (snapshot) => {
-      if (snapshot.kind === "team") setState(snapshot);
+      if (snapshot.kind === "team") applySnapshot(snapshot);
     },
   );
 
@@ -62,7 +73,7 @@ export default function TeamDashboard({ initialState, onLeave }: Props) {
     try {
       await submitProof(challengeId, file);
       const fresh = await fetchTeamState();
-      setState(fresh);
+      applySnapshot(fresh);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "upload failed");
     } finally {
@@ -72,7 +83,7 @@ export default function TeamDashboard({ initialState, onLeave }: Props) {
 
   const refresh = async () => {
     try {
-      setState(await fetchTeamState());
+      applySnapshot(await fetchTeamState());
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "could not refresh");
@@ -83,10 +94,9 @@ export default function TeamDashboard({ initialState, onLeave }: Props) {
     if (window.confirm("Leave the game on this device?")) onLeave();
   };
 
-  const openCount = state.board.filter((c) => c.status !== "claimed").length;
 
   return (
-    <div className="min-h-screen pb-16">
+    <div className="min-h-screen pb-28 lg:pb-16">
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3">
           <div className="min-w-0 flex-1">
@@ -103,20 +113,20 @@ export default function TeamDashboard({ initialState, onLeave }: Props) {
 
           <LivePill status={status} />
 
-          <button type="button" onClick={refresh} className="btn-secondary">
-            Refresh
+          <button type="button" onClick={refresh} aria-label="Refresh game" className="btn-secondary min-h-11 px-3">
+            ?
           </button>
           <button
             type="button"
             onClick={leave}
-            className="btn px-2 text-slate-500 hover:text-rose-700"
+            className="btn min-h-11 px-2 text-slate-500 hover:text-rose-700"
           >
             Leave
           </button>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-6">
+      <main className="mx-auto max-w-6xl px-3 py-4 sm:px-4 sm:py-6">
         {state.session.status === "lobby" ? (
           <p className="mb-6 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-sm font-medium text-brand-700">
             You&apos;re in. Waiting for the host to start the hunt — challenges
@@ -140,35 +150,18 @@ export default function TeamDashboard({ initialState, onLeave }: Props) {
         ) : null}
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <section>
-            <h2 className="mb-3 flex items-baseline justify-between text-sm font-bold uppercase tracking-wide text-slate-500">
-              <span>Live board</span>
-              <span className="text-xs font-semibold normal-case tracking-normal text-slate-500">
-                {openCount} open
-              </span>
-            </h2>
+          <div className={mobileTab === "board" ? "min-w-0" : "hidden min-w-0 lg:block"}>
+            <CardTable
+              board={state.board}
+              session={state.session}
+              busy={busyId !== null}
+              error={error}
+              onUpload={(id, file) => void upload(id, file)}
+            />
+          </div>
 
-            {state.board.length === 0 ? (
-              <p className="rounded-2xl border border-dashed border-slate-300 bg-white/60 px-4 py-10 text-center text-sm text-slate-500">
-                No challenges on the board yet.
-              </p>
-            ) : (
-              <ul className="space-y-3">
-                {state.board.map((challenge) => (
-                  <ChallengeCard
-                    key={challenge.id}
-                    challenge={challenge}
-                    busy={busyId === challenge.id}
-                    isMine={challenge.claimed_by_team_id === state.team.id}
-                    onUpload={(file) => upload(challenge.id, file)}
-                  />
-                ))}
-              </ul>
-            )}
-          </section>
-
-          <aside className="space-y-6">
-            <section>
+          <aside className={mobileTab === "board" ? "hidden space-y-6 lg:block" : "space-y-6"}>
+            <section className={mobileTab === "clues" ? "" : "hidden lg:block"}>
               <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
                 Your clues
               </h2>
@@ -214,7 +207,7 @@ export default function TeamDashboard({ initialState, onLeave }: Props) {
               </div>
             </section>
 
-            <section>
+            <section className={mobileTab === "teams" ? "" : "hidden lg:block"}>
               <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
                 Team progress
               </h2>
@@ -250,94 +243,11 @@ export default function TeamDashboard({ initialState, onLeave }: Props) {
           </aside>
         </div>
       </main>
+      <nav className="player-mobile-nav" aria-label="Game views">
+        <button type="button" aria-current={mobileTab === "board" ? "page" : undefined} onClick={() => setMobileTab("board")}>The board</button>
+        <button type="button" aria-current={mobileTab === "clues" ? "page" : undefined} onClick={() => setMobileTab("clues")}>Your clues ? {state.clues.length}</button>
+        <button type="button" aria-current={mobileTab === "teams" ? "page" : undefined} onClick={() => setMobileTab("teams")}>Teams</button>
+      </nav>
     </div>
-  );
-}
-
-function ChallengeCard({
-  challenge,
-  busy,
-  isMine,
-  onUpload,
-}: {
-  challenge: Challenge;
-  busy: boolean;
-  isMine: boolean;
-  onUpload: (file: File | undefined) => void;
-}) {
-  const submission = challenge.my_submission;
-  const claimedByOther = challenge.status === "claimed" && !isMine;
-
-  return (
-    <li
-      className={`card p-4 transition ${
-        claimedByOther ? "bg-slate-50 opacity-70" : "hover:border-slate-300"
-      }`}
-    >
-      <div className="mb-2 flex flex-wrap items-center gap-2">
-        <TierBadge tier={challenge.clue_tier} />
-        <ChallengeStatusBadge status={challenge.status} />
-        {isMine ? (
-          <span className="rounded-full bg-emerald-700 px-2.5 py-0.5 text-xs font-bold text-white">
-            Won by you
-          </span>
-        ) : null}
-      </div>
-
-      <h3 className="text-base font-bold text-slate-900">{challenge.title}</h3>
-
-      {challenge.location_area ? (
-        <p className="mt-1 text-xs font-medium text-slate-600">
-          📍 {challenge.location_area}
-        </p>
-      ) : null}
-
-      <p className="mt-2 text-sm leading-relaxed text-slate-700">
-        🎯 {challenge.completion_condition}
-      </p>
-
-      {submission ? (
-        <p
-          className={`mt-3 rounded-lg px-3 py-2 text-xs font-semibold ${
-            submission.status === "approved"
-              ? "bg-emerald-50 text-emerald-800"
-              : submission.status === "rejected"
-                ? "bg-rose-50 text-rose-800"
-                : "bg-indigo-50 text-indigo-800"
-          }`}
-        >
-          {submission.status === "approved"
-            ? "Approved — clue unlocked."
-            : submission.status === "rejected"
-              ? `Rejected${submission.review_note ? `: ${submission.review_note}` : ""}. Try again.`
-              : "Submitted — waiting for the host to approve."}
-        </p>
-      ) : null}
-
-      {challenge.status !== "claimed" ? (
-        <label
-          className={`mt-3 ${
-            busy
-              ? "btn cursor-wait bg-slate-100 text-slate-500"
-              : submission
-                ? "btn-secondary cursor-pointer"
-                : "btn-primary cursor-pointer"
-          }`}
-        >
-          {busy ? "Uploading…" : submission ? "Submit again" : "Submit photo proof"}
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            disabled={busy}
-            onChange={(event) => {
-              onUpload(event.target.files?.[0]);
-              event.target.value = "";
-            }}
-          />
-        </label>
-      ) : null}
-    </li>
   );
 }

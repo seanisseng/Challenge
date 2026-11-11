@@ -32,8 +32,11 @@ def fill_placeholders(text: str | None) -> str | None:
 
 def _render_challenge(challenge: dict[str, Any]) -> dict[str, Any]:
     """Apply placeholders to the fields a player actually reads."""
+    challenge = dict(challenge)
+    image_path = challenge.pop("image_path", None)
     return {
         **challenge,
+        "image_url": repo.public_asset_url(image_path),
         "title": fill_placeholders(challenge.get("title")),
         "location_area": fill_placeholders(challenge.get("location_area")),
         "completion_condition": fill_placeholders(
@@ -83,6 +86,8 @@ def session_core(session_id: str) -> dict[str, Any]:
             "status": session["status"],
             "team_count": session["team_count"],
             "active_task_limit": session["active_task_limit"],
+            "board_visible": session.get("board_visible", False),
+            "board_reveal_version": session.get("board_reveal_version", 0),
         },
         "board": [_render_challenge(c) for c in repo.active_challenges(session_id)],
         "progress": repo.progress(session_id),
@@ -98,7 +103,8 @@ def team_payload(member: dict[str, Any], core: dict[str, Any] | None = None) -> 
         core = session_core(session_id)
 
     submissions = repo.team_submissions(team_id)
-    board = _board_with_my_status(core["board"], submissions)
+    visible = core["session"].get("board_visible", False) and core["session"]["status"] == "active"
+    board = _board_with_my_status(core["board"] if visible else [], submissions)
 
     return {
         "kind": "team",
@@ -129,6 +135,7 @@ def admin_payload(session_id: str, core: dict[str, Any] | None = None) -> dict[s
         "kind": "admin",
         "session": core["session"],
         "board": core["board"],
+        "queue": [_render_challenge(c) for c in repo.queued_challenges(session_id)],
         "progress": core["progress"],
         "teams": [
             {
