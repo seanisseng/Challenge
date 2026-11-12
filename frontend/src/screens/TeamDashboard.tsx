@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CircleHelp, Flag, LayoutGrid, LoaderCircle, LogOut, MoreHorizontal, RefreshCw, Ticket, Users, WifiOff } from "lucide-react";
+import { CircleHelp, LayoutGrid, LoaderCircle, LogOut, MoreHorizontal, RefreshCw, Ticket, Users, WifiOff } from "lucide-react";
 import { RaceDialog } from "../components/RaceDialog";
 import { CardTable } from "../components/CardTable";
-import { ClueEnvelope } from "../components/ClueEnvelope";
+import { TeamProgressCards, NoTeams, emptyTierCounts, type TierCounts } from "../components/TeamProgressCards";
 import { ClueNotifications } from "../components/ClueNotifications";
 import type { ClueOutcome } from "../components/ClueNotifications";
 import { createClueCursor, readClueUpdates } from "../lib/clueNotifications";
@@ -105,6 +105,19 @@ export default function TeamDashboard({ initialState, onLeave }: Props) {
       ),
     [state.progress],
   );
+
+  // Use only tier metadata already present in the snapshot; own clues are authoritative.
+  const teamTierCounts = useMemo(() => {
+    const counts: Record<string, TierCounts> = {};
+    const seen = new Set<string>();
+    for (const award of state.clue_awards ?? []) {
+      if (seen.has(award.id)) continue;
+      seen.add(award.id);
+      (counts[award.team_id] ??= emptyTierCounts())[award.tier]++;
+    }
+    counts[state.team.id] = { tier1: cluesByTier.tier1.length, tier2: cluesByTier.tier2.length, tier3: cluesByTier.tier3.length };
+    return counts;
+  }, [state.clue_awards, state.team.id, cluesByTier]);
 
   const upload = async (challengeId: string, file: File | undefined) => {
     if (!file) return;
@@ -248,30 +261,11 @@ export default function TeamDashboard({ initialState, onLeave }: Props) {
               </div>
             </section>
 
-            <section className={mobileTab === "teams" ? "" : "hidden lg:block"}>
+            <section className={mobileTab === "teams" ? "player-team-progress" : "player-team-progress hidden lg:block"}>
               <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
                 Team progress
               </h2>
-              <ul className="card race-team-list">
-                {ranked.map((team) => {
-                  const mine = team.team_id === state.team.id;
-                  const maxClues = Math.max(1, ...ranked.map(entry => entry.clue_count));
-                  return (
-                    <li key={team.team_id} className={`race-team-row ${mine ? "race-team-row--mine" : ""}`}>
-                      <div className="race-team-label">
-                        <strong>{team.team_name}</strong>
-                        {mine ? <span className="you-stamp">YOU</span> : null}
-                        <span className="race-member-count"><Users size={14} aria-hidden="true" /> {team.member_count} players</span>
-                      </div>
-                      {mine ? <div className="team-inventory-envelopes">{TIERS.map(tier => <ClueEnvelope key={tier} tier={tier} count={cluesByTier[tier].length} />)}</div> : null}
-                      <div className="race-track" aria-hidden="true">
-                        <div className="race-track-fill" style={{ width: `${team.clue_count / maxClues * 100}%` }}><span><Flag size={12} /></span></div>
-                      </div>
-                      <p className="race-track-count">{team.clue_count} {team.clue_count === 1 ? "clue" : "clues"} unlocked</p>
-                    </li>
-                  );
-                })}
-              </ul>
+              {ranked.length ? <TeamProgressCards rows={ranked} ownTeamId={state.team.id} counts={teamTierCounts} /> : <NoTeams />}
             </section>
           </aside>
         </div>

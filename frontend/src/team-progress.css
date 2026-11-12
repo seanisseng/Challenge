@@ -1,0 +1,55 @@
+/* Sticker collections share the clue ticket's palette, type and rounded corners. */
+.tier-sticker { --sticker-angle: -3deg; position: relative; display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 2px; width: 56px; height: 38px; border: 2px solid var(--color-orange-text); border-radius: 4px; color: var(--color-ink); background: var(--color-surface); transform: rotate(var(--sticker-angle)); }
+.tier-sticker--2 { --sticker-angle: 3deg; background: var(--color-orange-tint); }
+.tier-sticker--3 { --sticker-angle: -2deg; background: var(--color-orange); border-color: var(--color-orange-text); }
+.tier-sticker--empty { background: transparent; border: 2px dashed var(--color-muted); color: var(--color-muted); }
+.tier-sticker-number { font: 700 30px/1 var(--font-display); }
+.tier-sticker-copy { display: flex; flex-direction: column; font: 700 14px/1 var(--font-display); white-space: nowrap; }
+.tier-sticker-chevrons { display: flex; margin-top: 2px; }
+.tier-sticker-count { position: absolute; top: -9px; right: -7px; padding: 1px 4px; border: 1px solid var(--color-ink); border-radius: 4px; color: var(--color-surface); background: var(--color-ink); font: 700 14px/1.2 var(--font-display); transform: rotate(calc(-1 * var(--sticker-angle))); }
+.tier-sticker--md { width: 76px; height: 48px; gap: 5px; }
+.tier-sticker--md .tier-sticker-number { font-size: 38px; }
+.tier-sticker--earned { box-shadow: 1px 2px 0 rgb(var(--race-ink) / .12); }
+.tier-sticker--slap { animation: sticker-slap 320ms ease-out; }
+@keyframes sticker-slap { from { transform: scale(1.15) rotate(calc(var(--sticker-angle) + 4deg)); } 70% { transform: scale(.98) rotate(calc(var(--sticker-angle) - 1deg)); } to { transform: scale(1) rotate(var(--sticker-angle)); } }
+.team-sticker-cards { display: grid; gap: 0; padding-top: 9px; }
+.team-sticker-card { position: relative; min-width: 0; min-height: 104px; padding: 14px 14px 10px; border: 1px solid var(--color-line); border-bottom: 1px dashed #8b8c89; border-radius: 8px; background: var(--color-surface); color: var(--color-ink); }
+.team-sticker-card + .team-sticker-card { margin-top: 9px; }
+.team-sticker-card--mine { background: var(--color-orange-tint); }
+.team-card-labels { position: absolute; top: -10px; right: 12px; display: flex; gap: 6px; }
+.team-label-sticker { display: inline-block; padding: 1px 6px; border: 1.5px solid var(--color-orange-text); border-radius: 3px; color: var(--color-orange-pressed); background: var(--color-surface); font: 700 14px/18px var(--font-display); letter-spacing: .06em; transform: rotate(3deg); }
+.team-label-sticker--you { transform: rotate(-3deg); }
+.team-label-sticker--finished { background: var(--color-ink); color: var(--color-surface); border-color: var(--color-ink); }
+.team-label-sticker--leading { background: var(--color-orange); color: var(--color-ink); }
+.team-card-heading { display: flex; align-items: baseline; gap: 8px; }
+.team-card-heading > strong { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; line-height: 24px; font-weight: 750; }
+.team-card-members { display: inline-flex; flex-shrink: 0; align-items: center; gap: 4px; font-size: 14px; color: var(--color-muted); }
+.team-card-collection { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 9px; }
+.team-card-stickers { display: flex; align-items: center; gap: 18px; }
+.team-card-total { flex-shrink: 0; min-width: 36px; text-align: center; }
+.team-card-total strong { display: block; font: 700 34px/.85 var(--font-display); }
+.team-card-total > span { display: block; margin-top: 3px; font: 600 14px/1 var(--font-display); letter-spacing: .05em; }
+.team-card-data-note { margin-top: 6px; font-size: 14px; color: var(--color-muted); }
+.team-card-code { margin-top: 4px; font-size: 14px; color: var(--color-muted); }
+.team-card-code span { margin-left: 7px; font-family: monospace; color: var(--color-ink); }
+.team-sticker-cards--host { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
+.team-sticker-cards--host .team-sticker-card { min-height: 174px; margin: 0; padding: 20px; border-bottom-style: dashed; }
+.team-sticker-cards--host .team-card-heading > strong { font-size: 20px; }
+.team-sticker-cards--host .team-card-collection { margin-top: 22px; }
+.team-sticker-cards--host .team-card-stickers { gap: 12px; }
+.team-sticker-cards--host .team-card-total strong { font-size: 44px; }
+.progress-view-toggle { margin-left: auto; }
+.team-progress-table-wrap { overflow-x: auto; border: 1px solid var(--color-line); border-radius: 8px; }
+.team-progress-table { width: 100%; background: var(--color-surface); text-align: left; font-size: 14px; }
+.team-progress-table th, .team-progress-table td { padding: 16px; border-bottom: 1px dashed var(--color-line); }
+.team-progress-table thead { background: var(--color-orange-tint); }
+.team-skeleton-name { display: block; width: 45%; height: 18px; margin-bottom: 18px; border-radius: 4px; background: var(--color-line); }
+.team-sticker-skeleton { animation: sticker-skeleton 1.8s ease-in-out infinite alternate; }
+@keyframes sticker-skeleton { to { background: var(--color-paper); } }
+@media (max-width: 1199px) { .team-sticker-cards--host { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 767px) { .team-sticker-cards--host { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 1023px) {
+  .race-player--teams .player-layout > aside > .player-team-progress { margin-top: 0; }
+  .race-player--teams .player-layout { padding-top: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .tier-sticker--slap, .team-sticker-skeleton { animation: none; } }

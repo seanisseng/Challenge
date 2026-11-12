@@ -14,6 +14,7 @@ import AdminConsole from "./screens/AdminConsole";
 import AdminLogin from "./screens/AdminLogin";
 import JoinScreen from "./screens/JoinScreen";
 import TeamDashboard from "./screens/TeamDashboard";
+import { TeamProgressSkeleton } from "./components/TeamProgressCards";
 
 export default function App() {
   const route = useRoute();
@@ -105,8 +106,9 @@ function AdminRoute() {
 
 function Booting({ label }: { label: string }) {
   return (
-    <main className="flex min-h-screen items-center justify-center">
-      <p className="animate-pulse text-sm font-medium text-slate-500">{label}</p>
+    <main className="mx-auto max-w-lg px-3 py-6">
+      <p className="mb-4 text-sm font-medium text-slate-600">{label}</p>
+      <TeamProgressSkeleton />
     </main>
   );
 }

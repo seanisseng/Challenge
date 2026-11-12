@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Check, Copy, ExternalLink, Flag, ImageOff, Inbox, Keyboard, LoaderCircle, LockKeyhole, Mail, MapPin, RefreshCw, Route, Ticket, Users, X } from "lucide-react";
+import { ArrowRight, Check, Copy, ExternalLink, ImageOff, Inbox, Keyboard, LoaderCircle, LockKeyhole, Mail, RefreshCw, Route, Ticket, Users, X } from "lucide-react";
 import { ApiError, listClues, submissionPhoto } from "../lib/api";
 import type { AdminState, AdminSubmission, AdminTeam, Clue, Tier } from "../lib/types";
+import { TeamProgressCards, NoTeams, emptyTierCounts, type TierCounts } from "./TeamProgressCards";
 import { SubmissionStatusBadge, TierBadge } from "./Badges";
 
 function PageHeading({ eyebrow, title, children }: { eyebrow: string; title: string; children: React.ReactNode }) {
@@ -109,10 +110,20 @@ export function CluesTab({ sessionId, onError }: { sessionId: string; onError: (
 }
 
 export function ProgressTab({ state }: { state: AdminState }) {
+  const [table, setTable] = useState(false);
   const rows = [...state.progress].sort((a, b) => b.clue_count - a.clue_count || a.team_name.localeCompare(b.team_name));
-  const maximum = Math.max(3, ...rows.map(row => row.clue_count));
-  return <section className="race-progress"><PageHeading eyebrow="RACE CONTROL / THE FIELD" title="Follow the field.">Track the clues each team has earned and the challenges they have secured.</PageHeading>
-    <div className="host-view-summary"><span><b>{String(rows.length).padStart(2, "0")}</b> teams racing</span><span><b>{String(rows.reduce((sum, row) => sum + row.claimed_count, 0)).padStart(2, "0")}</b> challenges secured</span><span><MapPin size={15} aria-hidden="true" />Clue progress; physical locations are not tracked</span></div>
-    {!rows.length ? <div className="race-empty"><Flag size={30} aria-hidden="true" /><h3>The field is getting ready.</h3><p>Team progress will appear as the session gets under way.</p></div> : <ol className="race-progress-list">{rows.map((row, index) => <li key={row.team_id}><div className="progress-team"><span className="progress-rank">{String(index + 1).padStart(2, "0")}</span><div><h3>{row.team_name}</h3><span>{row.member_count} players / {row.claimed_count} challenges secured</span></div></div><div className="progress-route" aria-hidden="true"><span className="progress-route-start" /><span className="progress-route-line" /><span className="progress-route-marker" style={{ left: `${row.clue_count / maximum * 100}%` }}><Flag size={16} /></span></div><div className="progress-clues"><strong>{String(row.clue_count).padStart(2, "0")}</strong><span>CLUES UNLOCKED</span></div></li>)}</ol>}
+  const counts: Record<string, TierCounts> = {};
+  // Some claimed cards remain in the board snapshot. Never infer tiers from totals.
+  for (const challenge of [...state.board, ...state.queue]) {
+    if (challenge.status === "claimed" && challenge.claimed_by_team_id) {
+      (counts[challenge.claimed_by_team_id] ??= emptyTierCounts())[challenge.clue_tier]++;
+    }
+  }
+  const codes = Object.fromEntries(state.teams.map(team => [team.id, team.join_code]));
+  return <section className="race-progress"><PageHeading eyebrow="RACE CONTROL / THE FIELD" title="Follow the field.">Every clue adds to the collection. See what each team has earned.</PageHeading>
+    <div className="host-view-summary"><span><b>{String(rows.length).padStart(2, "0")}</b> teams racing</span><span><b>{String(rows.reduce((sum, row) => sum + row.claimed_count, 0)).padStart(2, "0")}</b> challenges secured</span>
+      <button className="btn-secondary progress-view-toggle" type="button" aria-pressed={table} onClick={() => setTable(value => !value)}>Table view</button></div>
+    {!rows.length ? <NoTeams /> : table ? <div className="team-progress-table-wrap"><table className="team-progress-table"><caption className="sr-only">Team progress details</caption><thead><tr><th scope="col">Team</th><th scope="col">Join code</th><th scope="col">Players</th><th scope="col">Clues</th><th scope="col">Challenges secured</th></tr></thead><tbody>{rows.map(row => <tr key={row.team_id}><th scope="row">{row.team_name}</th><td><code>{codes[row.team_id]}</code></td><td>{row.member_count}</td><td>{row.clue_count}</td><td>{row.claimed_count}</td></tr>)}</tbody></table></div>
+      : <TeamProgressCards rows={rows} counts={counts} codes={codes} host />}
   </section>;
 }

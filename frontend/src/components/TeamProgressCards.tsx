@@ -27,7 +27,8 @@ export function TeamProgressCards({ rows, counts, ownTeamId, codes, finishedTeam
           <span className="team-card-members"><Users size={15} aria-hidden="true" />{row.member_count} {row.member_count === 1 ? "player" : "players"}</span>
         </div>
         {host ? <p className="team-card-code">JOIN CODE <span>{codes?.[row.team_id] ?? "—"}</span></p> : null}
-        <div className="team-card-collection"><div className="team-card-stickers" aria-label={completeBreakdown ? "Tier collection" : "Known tier awards; full breakdown unavailable"}>
+        <div className="team-card-collection"><div className="team-card-stickers" role={completeBreakdown ? "group" : "img"}
+          aria-label={completeBreakdown ? "Tier collection" : `Full tier breakdown unavailable. Known awards: Tier 1, ${earned.tier1}; Tier 2, ${earned.tier2}; Tier 3, ${earned.tier3}. Empty slots may have unreported awards.`}>
           {tiers.map(tier => <TierSticker key={tier} tier={tier} count={earned[`tier${tier}`]} state={earned[`tier${tier}`] > 0 ? "earned" : "empty"} size={host ? "md" : "sm"} />)}
         </div><div className="team-card-total" aria-label={`${row.clue_count} total clues`}><strong>{row.clue_count}</strong><span>CLUES</span></div></div>
         {!completeBreakdown ? <p className="team-card-data-note">Full tier breakdown unavailable</p> : null}

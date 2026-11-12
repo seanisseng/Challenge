@@ -11,8 +11,13 @@ export function TierSticker({ tier, state, count, size = "sm" }: {
   const [slapping, setSlapping] = useState(false);
   useEffect(() => {
     const next = state === "earned" ? count : 0;
-    if (next > previous.current) setSlapping(true);
+    const animate = next > previous.current && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     previous.current = next;
+    setSlapping(animate);
+    if (animate) {
+      const timer = window.setTimeout(() => setSlapping(false), 340);
+      return () => window.clearTimeout(timer);
+    }
   }, [state, count]);
   return <span role="img" aria-label={`Tier ${tier} sticker, ${state === "earned" ? `${count} earned` : "not yet earned"}`}
     className={`tier-sticker tier-sticker--${tier} tier-sticker--${state} tier-sticker--${size}${slapping ? " tier-sticker--slap" : ""}`}
