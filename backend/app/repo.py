@@ -7,17 +7,54 @@ the caller's team is always resolved from a member token first.
 
 from __future__ import annotations
 
+import logging
+import time
 import uuid
 from urllib.parse import quote
 from datetime import datetime, timezone
 from typing import Any
 
+import httpx
 from fastapi import HTTPException
 from postgrest.exceptions import APIError
 from supabase import Client
 
 from app.config import get_settings
 from app.db.supabase_client import get_admin_client
+
+log = logging.getLogger(__name__)
+
+# Postgres sqlstate for "deadlock detected". The whole transaction was rolled
+# back, so replaying the call is always safe.
+DEADLOCK_SQLSTATE = "40P01"
+
+# Two admin devices approving at the same moment used to deadlock because the
+# reviewers locked submission-then-challenge while discard did the reverse. The
+# database functions now agree on one lock order, but a retry is cheap insurance
+# against any future ordering we have not spotted.
+RPC_ATTEMPTS = 3
+RPC_BACKOFF = 0.05
+
+# A dropped connection may hide a commit. These RPCs set an absolute state (or
+# return early when already done), so replaying them cannot double-apply.
+REPLAY_SAFE_RPCS = frozenset(
+    {
+        "approve_submission",
+        "reject_submission",
+        "discard_challenge",
+        "defer_challenge",
+        "reorder_challenge_queue",
+        "set_board_visibility",
+        "refill_board",
+    }
+)
+
+# If a replay finds the work already done, the first attempt committed and only
+# its response was lost. That is a success, not an error.
+_ALREADY_DONE = {
+    "approve_submission": "submission is already approved",
+    "reject_submission": "submission is already rejected",
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -43,11 +80,51 @@ def _to_http(exc: APIError) -> HTTPException:
     return HTTPException(status_code=status, detail=_clean_message(message))
 
 
-def rpc(name: str, params: dict[str, Any]) -> Any:
-    try:
-        return _client().rpc(name, params).execute().data
-    except APIError as exc:
-        raise _to_http(exc) from exc
+def _is_lost_commit(name: str, exc: APIError) -> bool:
+    """True when a replay proves the original call had already committed."""
+    expected = _ALREADY_DONE.get(name)
+    if not expected:
+        return False
+    return expected in (getattr(exc, "message", None) or str(exc)).lower()
+
+
+def rpc(name: str, params: dict[str, Any], *, retry: bool | None = None) -> Any:
+    """Call a Postgres function, surviving deadlocks and dropped sockets.
+
+    ``retry`` defaults to the idempotency table above. A transport failure on a
+    non-replayable call is surfaced as 503 so the client can retry deliberately,
+    rather than as an opaque 500.
+    """
+    if retry is None:
+        retry = name in REPLAY_SAFE_RPCS
+
+    delay = RPC_BACKOFF
+    for attempt in range(1, RPC_ATTEMPTS + 1):
+        last = attempt == RPC_ATTEMPTS
+        try:
+            return _client().rpc(name, params).execute().data
+        except APIError as exc:
+            code = getattr(exc, "code", None)
+            if code == DEADLOCK_SQLSTATE and not last:
+                log.warning("deadlock in %s, retrying (attempt %d)", name, attempt)
+            elif retry and not last and _is_lost_commit(name, exc):
+                log.warning("%s already applied before the connection dropped", name)
+                return None
+            else:
+                raise _to_http(exc) from exc
+        except httpx.TransportError as exc:
+            if not retry or last:
+                log.warning("transport failure in %s: %s", name, exc)
+                raise HTTPException(
+                    status_code=503,
+                    detail="lost contact with the database, please try again",
+                ) from exc
+            log.warning(
+                "retrying %s after %s (attempt %d)", name, type(exc).__name__, attempt
+            )
+        time.sleep(delay)
+        delay *= 2
+    raise AssertionError("unreachable")  # pragma: no cover
 
 
 def _select(table: str):
@@ -131,6 +208,16 @@ def list_members(team_ids: list[str]) -> list[dict[str, Any]]:
         .execute()
         .data
     )
+
+
+def members_by_team(team_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+    """Team rosters in one query, keyed by team id."""
+    out: dict[str, list[dict[str, Any]]] = {team_id: [] for team_id in team_ids}
+    for member in list_members(team_ids):
+        out.setdefault(member["team_id"], []).append(
+            {"id": member["id"], "name": member["name"]}
+        )
+    return out
 
 
 def delete_member(member_id: str) -> None:
@@ -252,16 +339,35 @@ def reorder_queue(session_id: str, challenge_ids: list[str], expected_ids: list[
 
 
 def team_submissions(team_id: str) -> list[dict[str, Any]]:
-    return (
+    return submissions_by_team([team_id]).get(team_id, [])
+
+
+def submissions_by_team(team_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+    """Every team's submissions in one query, keyed by team.
+
+    The broadcast path used to run this per connected device. One query per
+    room keeps a fan-out to 100 phones at the same cost as a fan-out to one.
+    """
+    out: dict[str, list[dict[str, Any]]] = {team_id: [] for team_id in team_ids}
+    if not team_ids:
+        return out
+
+    rows = (
         _select("submissions")
         .select(
-            "id,challenge_id,status,photo_path,review_note,submitted_at,reviewed_at,team_member_id"
+            "id,challenge_id,team_id,status,photo_path,review_note,"
+            "submitted_at,reviewed_at,team_member_id"
         )
-        .eq("team_id", team_id)
+        .in_("team_id", team_ids)
         .order("submitted_at", desc=True)
         .execute()
         .data
     )
+    for row in rows:
+        row = dict(row)
+        team_id = row.pop("team_id", None)
+        out.setdefault(team_id, []).append(row)
+    return out
 
 
 def session_submissions(session_id: str, status: str | None = None) -> list[dict[str, Any]]:
@@ -281,19 +387,46 @@ def session_submissions(session_id: str, status: str | None = None) -> list[dict
     return query.execute().data
 
 
+TIER_ORDER = {"tier1": 1, "tier2": 2, "tier3": 3}
+
+
+def _clue_payload(clue: dict[str, Any], unlocked_at: str) -> dict[str, Any]:
+    return {
+        "id": clue["id"],
+        "tier": clue["tier"],
+        "title": clue["title"],
+        "body": clue["body"],
+        "media_url": clue.get("media_url"),
+        "unlocked_at": unlocked_at,
+    }
+
+
+def _clue_sort_key(clue: dict[str, Any]) -> tuple[int, str]:
+    return (TIER_ORDER.get(clue["tier"], 9), clue["unlocked_at"])
+
+
 def team_clues(team_id: str) -> list[dict[str, Any]]:
+    return clues_by_team([team_id]).get(team_id, [])
+
+
+def clues_by_team(team_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+    """Unlocked clues for every team in the room, in two queries."""
+    out: dict[str, list[dict[str, Any]]] = {team_id: [] for team_id in team_ids}
+    if not team_ids:
+        return out
+
     unlocked = (
         _select("team_clues")
-        .select("clue_id,challenge_id,unlocked_at")
-        .eq("team_id", team_id)
+        .select("team_id,clue_id,unlocked_at")
+        .in_("team_id", team_ids)
         .order("unlocked_at")
         .execute()
         .data
     )
     if not unlocked:
-        return []
+        return out
 
-    clue_ids = [row["clue_id"] for row in unlocked]
+    clue_ids = sorted({row["clue_id"] for row in unlocked})
     clues = (
         _select("clues")
         .select("id,tier,title,body,media_url,sort_order")
@@ -301,25 +434,18 @@ def team_clues(team_id: str) -> list[dict[str, Any]]:
         .execute()
         .data
     )
-    by_id = {c["id"]: c for c in clues}
+    by_id = {clue["id"]: clue for clue in clues}
 
-    out: list[dict[str, Any]] = []
     for row in unlocked:
         clue = by_id.get(row["clue_id"])
         if not clue:
             continue
-        out.append(
-            {
-                "id": clue["id"],
-                "tier": clue["tier"],
-                "title": clue["title"],
-                "body": clue["body"],
-                "media_url": clue.get("media_url"),
-                "unlocked_at": row["unlocked_at"],
-            }
+        out.setdefault(row["team_id"], []).append(
+            _clue_payload(clue, row["unlocked_at"])
         )
-    tier_order = {"tier1": 1, "tier2": 2, "tier3": 3}
-    out.sort(key=lambda c: (tier_order.get(c["tier"], 9), c["unlocked_at"]))
+
+    for clues_for_team in out.values():
+        clues_for_team.sort(key=_clue_sort_key)
     return out
 
 
@@ -346,8 +472,14 @@ def recent_clue_awards(session_id: str) -> list[dict[str, Any]]:
     ]
 
 
-def progress(session_id: str) -> list[dict[str, Any]]:
-    teams = list_teams(session_id)
+def progress(session_id: str, teams: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    """Per-team tallies for the scoreboard.
+
+    ``teams`` lets the broadcast path reuse the team list it already fetched
+    instead of issuing the same query twice.
+    """
+    if teams is None:
+        teams = list_teams(session_id)
     if not teams:
         return []
     team_ids = [t["id"] for t in teams]
@@ -547,6 +679,10 @@ def refill_board(session_id: str) -> None:
 # --------------------------------------------------------------------------- #
 # storage
 # --------------------------------------------------------------------------- #
+UPLOAD_ATTEMPTS = 3
+UPLOAD_BACKOFF = 0.25
+
+
 def public_asset_url(path: str | None) -> str | None:
     if not path:
         return None
@@ -557,6 +693,41 @@ def public_asset_url(path: str | None) -> str | None:
     )
 
 
+def _upload_object(bucket: str, path: str, data: bytes, content_type: str) -> None:
+    """Upload bytes, retrying a dropped connection.
+
+    A burst of phones uploading at once used to kill the connection mid-upload
+    and the whole submission failed. Retries reuse the same object path, so a
+    "duplicate" answer means an earlier attempt actually landed.
+    """
+    delay = UPLOAD_BACKOFF
+    for attempt in range(1, UPLOAD_ATTEMPTS + 1):
+        try:
+            _client().storage.from_(bucket).upload(
+                path, data, {"content-type": content_type, "upsert": "false"}
+            )
+            return
+        except httpx.TransportError as exc:
+            if attempt == UPLOAD_ATTEMPTS:
+                log.warning("upload of %s failed: %s", path, exc)
+                raise HTTPException(
+                    status_code=503, detail="photo storage is busy, please try again"
+                ) from exc
+            log.warning(
+                "retrying upload %s after %s (attempt %d)",
+                path,
+                type(exc).__name__,
+                attempt,
+            )
+        except Exception as exc:  # storage3 raises its own error types
+            text = str(exc).lower()
+            if "duplicate" in text or "already exists" in text:
+                return
+            raise
+        time.sleep(delay)
+        delay *= 2
+
+
 def upload_challenge_image(
     session_id: str, filename: str, data: bytes, content_type: str
 ) -> str:
@@ -564,9 +735,9 @@ def upload_challenge_image(
     extension = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}[content_type]
     path = f"{session_id}/{uuid.uuid4().hex}{extension}"
     try:
-        _client().storage.from_(get_settings().asset_bucket).upload(
-            path, data, {"content-type": content_type, "upsert": "false"}
-        )
+        _upload_object(get_settings().asset_bucket, path, data, content_type)
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=400, detail="image upload failed") from exc
     return path
@@ -577,11 +748,9 @@ def upload_proof(session_id: str, team_id: str, filename: str, data: bytes, cont
     safe = f"{uuid.uuid4().hex}{filename[filename.rfind('.'):] if '.' in filename else '.jpg'}"
     path = f"{session_id}/{team_id}/{safe}"
     try:
-        _client().storage.from_(settings.proof_bucket).upload(
-            path,
-            data,
-            {"content-type": content_type, "upsert": "false"},
-        )
+        _upload_object(settings.proof_bucket, path, data, content_type)
+    except HTTPException:
+        raise
     except Exception as exc:  # storage3 raises its own errors
         raise HTTPException(status_code=400, detail=f"upload failed: {exc}") from exc
     return path

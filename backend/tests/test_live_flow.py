@@ -7,7 +7,8 @@ To run them:
     .\\.venv\\Scripts\\python.exe -m pytest tests/test_live_flow.py -v
 
 The session created by the test is deleted afterwards, which cascades to its
-teams, members, challenges, clues, submissions, and storage objects.
+teams, members, challenges, clues and submissions; its proof photos are removed
+from Storage first, because buckets do not cascade.
 """
 
 from __future__ import annotations
@@ -40,6 +41,17 @@ FAKE_PHOTO = b"\xff\xd8\xff\xe0" + b"\x00" * 64 + b"\xff\xd9"
 
 
 def _cleanup(session_id: str) -> None:
+    # Proof photos are not FK-cascaded out of Storage: deleting the session row
+    # leaves them behind. Remove the session's folder first so repeated live
+    # runs do not pile up orphaned objects in the bucket.
+    try:
+        bucket = get_admin_client().storage.from_(settings.proof_bucket)
+        for team in bucket.list(session_id) or []:
+            for entry in bucket.list(f"{session_id}/{team['name']}") or []:
+                if entry.get("id"):
+                    bucket.remove([f"{session_id}/{team['name']}/{entry['name']}"])
+    except Exception:  # pragma: no cover - best effort cleanup
+        pass
     try:
         get_admin_client().table("game_sessions").delete().eq(
             "id", session_id

@@ -7,6 +7,7 @@ snapshot is pushed, then every mutation on that session re-pushes it.
 
 from __future__ import annotations
 
+import asyncio
 import secrets
 from typing import Any
 
@@ -45,17 +46,17 @@ async def websocket_endpoint(
             await websocket.close(code=CLOSE_BAD_REQUEST)
             return
         try:
-            initial = snapshots.admin_payload(session_id)
+            initial = await asyncio.to_thread(snapshots.admin_payload, session_id)
         except Exception:
             await websocket.close(code=CLOSE_BAD_REQUEST)
             return
         sub = Subscriber(ws=websocket, session_id=session_id, kind="admin")
     else:
-        member = repo.member_by_token(token or "")
+        member = await asyncio.to_thread(repo.member_by_token, token or "")
         if member is None:
             await websocket.close(code=CLOSE_UNAUTHORIZED)
             return
-        initial = snapshots.team_payload(member)
+        initial = await asyncio.to_thread(snapshots.team_payload, member)
         sub = Subscriber(
             ws=websocket,
             session_id=member["session"]["id"],

@@ -75,9 +75,12 @@ def _board_with_my_status(
     return board
 
 
-def session_core(session_id: str) -> dict[str, Any]:
-    """The parts of the snapshot that are identical for every viewer."""
-    session = repo.get_session(session_id)
+def _core(
+    session: dict[str, Any],
+    board: list[dict[str, Any]],
+    progress: list[dict[str, Any]],
+    awards: list[dict[str, Any]],
+) -> dict[str, Any]:
     return {
         "session": {
             "id": session["id"],
@@ -89,21 +92,73 @@ def session_core(session_id: str) -> dict[str, Any]:
             "board_visible": session.get("board_visible", False),
             "board_reveal_version": session.get("board_reveal_version", 0),
         },
-        "board": [_render_challenge(c) for c in repo.active_challenges(session_id)],
-        "progress": repo.progress(session_id),
-        "clue_awards": repo.recent_clue_awards(session_id),
+        "board": board,
+        "progress": progress,
+        "clue_awards": awards,
     }
 
 
-def team_payload(member: dict[str, Any], core: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Full snapshot for one player's device."""
+def session_core(session_id: str) -> dict[str, Any]:
+    """The parts of the snapshot that are identical for every viewer."""
+    return _core(
+        repo.get_session(session_id),
+        [_render_challenge(c) for c in repo.active_challenges(session_id)],
+        repo.progress(session_id),
+        repo.recent_clue_awards(session_id),
+    )
+
+
+def room_data(session_id: str) -> dict[str, Any]:
+    """One batched view of a room, shared by every device in a broadcast.
+
+    Building each payload on its own meant two queries per connected phone plus
+    four for the host console, so one approval could fire hundreds of round
+    trips. This reads the room once (a fixed handful of queries) and the
+    per-viewer builders just slice the result.
+    """
+    session = repo.get_session(session_id)
+    teams = repo.list_teams(session_id)
+    team_ids = [team["id"] for team in teams]
+
+    return {
+        "core": _core(
+            session,
+            [_render_challenge(c) for c in repo.active_challenges(session_id)],
+            repo.progress(session_id, teams),
+            repo.recent_clue_awards(session_id),
+        ),
+        "teams": teams,
+        "members": repo.members_by_team(team_ids),
+        "submissions": repo.submissions_by_team(team_ids),
+        "clues": repo.clues_by_team(team_ids),
+        "queue": [_render_challenge(c) for c in repo.queued_challenges(session_id)],
+        "session_submissions": repo.session_submissions(session_id),
+    }
+
+
+def team_payload(
+    member: dict[str, Any],
+    core: dict[str, Any] | None = None,
+    room: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Full snapshot for one player's device.
+
+    Pass ``room`` from :func:`room_data` when fanning one broadcast out to many
+    devices; omit it for a one-off response and each read happens directly.
+    """
     session_id = member["session"]["id"]
     team_id = member["team"]["id"]
 
-    if core is None:
-        core = session_core(session_id)
+    if room is not None:
+        core = room["core"]
+        submissions = room["submissions"].get(team_id, [])
+        clues = room["clues"].get(team_id, [])
+    else:
+        if core is None:
+            core = session_core(session_id)
+        submissions = repo.team_submissions(team_id)
+        clues = repo.team_clues(team_id)
 
-    submissions = repo.team_submissions(team_id)
     visible = core["session"].get("board_visible", False) and core["session"]["status"] == "active"
     board = _board_with_my_status(core["board"] if visible else [], submissions)
 
@@ -114,30 +169,37 @@ def team_payload(member: dict[str, Any], core: dict[str, Any] | None = None) -> 
         "team": {"id": member["team"]["id"], "name": member["team"]["name"]},
         "board": board,
         "progress": core["progress"],
-        "clues": repo.team_clues(team_id),
+        "clues": clues,
         "my_submissions": submissions,
         "clue_awards": core.get("clue_awards", []),
     }
 
 
-def admin_payload(session_id: str, core: dict[str, Any] | None = None) -> dict[str, Any]:
+def admin_payload(
+    session_id: str,
+    core: dict[str, Any] | None = None,
+    room: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Full snapshot for the admin console."""
-    if core is None:
-        core = session_core(session_id)
-
-    teams = repo.list_teams(session_id)
-    members = repo.list_members([t["id"] for t in teams])
-    by_team: dict[str, list[dict[str, Any]]] = {}
-    for member in members:
-        by_team.setdefault(member["team_id"], []).append(
-            {"id": member["id"], "name": member["name"]}
-        )
+    if room is not None:
+        core = room["core"]
+        teams = room["teams"]
+        by_team = room["members"]
+        queue = room["queue"]
+        submissions = room["session_submissions"]
+    else:
+        if core is None:
+            core = session_core(session_id)
+        teams = repo.list_teams(session_id)
+        by_team = repo.members_by_team([team["id"] for team in teams])
+        queue = [_render_challenge(c) for c in repo.queued_challenges(session_id)]
+        submissions = repo.session_submissions(session_id)
 
     return {
         "kind": "admin",
         "session": core["session"],
         "board": core["board"],
-        "queue": [_render_challenge(c) for c in repo.queued_challenges(session_id)],
+        "queue": queue,
         "progress": core["progress"],
         "teams": [
             {
@@ -148,5 +210,5 @@ def admin_payload(session_id: str, core: dict[str, Any] | None = None) -> dict[s
             }
             for team in teams
         ],
-        "submissions": repo.session_submissions(session_id),
+        "submissions": submissions,
     }

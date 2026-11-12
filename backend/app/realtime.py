@@ -22,6 +22,10 @@ from app import snapshots
 
 log = logging.getLogger(__name__)
 
+# One unresponsive phone must not stall the room. Sends run concurrently, so
+# this bounds the whole fan-out rather than each socket.
+SEND_TIMEOUT = 5.0
+
 
 @dataclass(eq=False)
 class Subscriber:
@@ -54,34 +58,54 @@ class Hub:
     def presence(self, session_id: str) -> int:
         return len(self._room(session_id))
 
+    async def _send(self, sub: Subscriber, payload: dict[str, Any]) -> None:
+        try:
+            await asyncio.wait_for(sub.ws.send_json(payload), timeout=SEND_TIMEOUT)
+            return
+        except Exception:
+            log.debug("dropping dead subscriber", exc_info=True)
+
+        # Close the socket so the client notices and reconnects. Dropping it from
+        # the hub alone would leave that screen frozen on stale data forever.
+        try:
+            await asyncio.wait_for(sub.ws.close(), timeout=1.0)
+        except Exception:
+            pass
+        await self.unregister(sub)
+
     async def broadcast(self, session_id: str) -> None:
-        """Rebuild and push a snapshot to everyone watching this session."""
+        """Rebuild and push a snapshot to everyone watching this session.
+
+        The room is read once and every device gets a slice of that read. A
+        device that is slow, gone, or throws while its payload is assembled is
+        dropped on its own; it never takes the rest of the room down with it.
+        """
         room = self._room(session_id)
         if not room:
             return
 
         try:
-            core = await asyncio.to_thread(snapshots.session_core, session_id)
+            data = await asyncio.to_thread(snapshots.room_data, session_id)
         except Exception:
             log.exception("failed to build snapshot for session %s", session_id)
             return
 
+        payloads: list[tuple[Subscriber, dict[str, Any]]] = []
         for sub in room:
             try:
                 if sub.kind == "admin":
-                    payload = await asyncio.to_thread(
-                        snapshots.admin_payload, session_id, core
-                    )
+                    payload = snapshots.admin_payload(sub.session_id, room=data)
                 elif sub.member is not None:
-                    payload = await asyncio.to_thread(
-                        snapshots.team_payload, sub.member, core
-                    )
+                    payload = snapshots.team_payload(sub.member, room=data)
                 else:
                     continue
-                await sub.ws.send_json(payload)
             except Exception:
-                log.debug("dropping dead subscriber", exc_info=True)
-                await self.unregister(sub)
+                log.exception("failed to build payload for a %s subscriber", sub.kind)
+                continue
+            payloads.append((sub, payload))
+
+        if payloads:
+            await asyncio.gather(*(self._send(sub, payload) for sub, payload in payloads))
 
 
 hub = Hub()
