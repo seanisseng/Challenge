@@ -285,8 +285,8 @@ function SessionPicker({
   };
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-10">
-      <header className="mb-6 flex items-start justify-between gap-4">
+    <main className="race-sessions mx-auto max-w-3xl px-4 py-10">
+      <header className="entry-heading mb-6 flex items-start justify-between gap-4">
         <div>
           <span className="inline-flex items-center rounded-full bg-brand-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-brand-700 ring-1 ring-inset ring-brand-200">
             Host console
@@ -309,7 +309,7 @@ function SessionPicker({
         </p>
       ) : null}
 
-      <section className="card mb-8 p-5">
+      <section className="card entry-ticket mb-8 p-5">
         <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-500">
           New session
         </h2>
@@ -397,7 +397,7 @@ function SessionPicker({
                       · <span className="capitalize">{entry.status}</span>
                     </span>
                   </span>
-                  <span className="shrink-0 text-xs font-bold text-brand-700">
+                  <span className="shrink-0 text-sm font-bold text-slate-900">
                     Open →
                   </span>
                 </button>

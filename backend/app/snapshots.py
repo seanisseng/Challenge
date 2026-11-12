@@ -91,6 +91,7 @@ def session_core(session_id: str) -> dict[str, Any]:
         },
         "board": [_render_challenge(c) for c in repo.active_challenges(session_id)],
         "progress": repo.progress(session_id),
+        "clue_awards": repo.recent_clue_awards(session_id),
     }
 
 
@@ -115,6 +116,7 @@ def team_payload(member: dict[str, Any], core: dict[str, Any] | None = None) -> 
         "progress": core["progress"],
         "clues": repo.team_clues(team_id),
         "my_submissions": submissions,
+        "clue_awards": core.get("clue_awards", []),
     }
 
 

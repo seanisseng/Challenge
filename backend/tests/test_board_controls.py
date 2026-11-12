@@ -71,7 +71,7 @@ def test_hidden_board_keeps_admin_preview_but_never_leaks_to_team(monkeypatch, v
     monkeypatch.setattr(repo, "get_session", lambda _: session)
     monkeypatch.setattr(repo, "active_challenges", lambda _: [{"id": "live", "title": "Live"}])
     monkeypatch.setattr(repo, "queued_challenges", lambda _: [{"id": "next", "title": "Next"}], raising=False)
-    for name in ["progress", "list_teams", "list_members", "session_submissions", "team_submissions", "team_clues"]:
+    for name in ["progress", "list_teams", "list_members", "session_submissions", "team_submissions", "team_clues", "recent_clue_awards"]:
         monkeypatch.setattr(repo, name, lambda _: [])
     core = snapshots.session_core("session")
     member = {"id": "member", "name": "Player", "session": session, "team": {"id": "team", "name": "Team"}}

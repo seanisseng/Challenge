@@ -323,6 +323,29 @@ def team_clues(team_id: str) -> list[dict[str, Any]]:
     return out
 
 
+def recent_clue_awards(session_id: str) -> list[dict[str, Any]]:
+    """Public, session-scoped unlock events; never include clue text or media."""
+    rows = (
+        _select("team_clues")
+        .select("id,team_id,unlocked_at,teams!inner(name,session_id),clues!inner(tier)")
+        .eq("teams.session_id", session_id)
+        .order("unlocked_at", desc=True)
+        .limit(50)
+        .execute()
+        .data
+    )
+    return [
+        {
+            "id": row["id"],
+            "team_id": row["team_id"],
+            "team_name": row["teams"]["name"],
+            "tier": row["clues"]["tier"],
+            "awarded_at": row["unlocked_at"],
+        }
+        for row in rows
+    ]
+
+
 def progress(session_id: str) -> list[dict[str, Any]]:
     teams = list_teams(session_id)
     if not teams:

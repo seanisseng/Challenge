@@ -71,6 +71,14 @@ export interface SubmissionRecord {
   team_member_id: string | null;
 }
 
+export interface ClueAward {
+  id: string;
+  team_id: string;
+  team_name: string;
+  tier: Tier;
+  awarded_at: string;
+}
+
 export interface TeamState {
   kind: "team";
   session: SessionInfo;
@@ -80,6 +88,8 @@ export interface TeamState {
   progress: TeamProgress[];
   clues: Clue[];
   my_submissions: SubmissionRecord[];
+  /** Public award metadata only. Optional while older servers are deployed. */
+  clue_awards?: ClueAward[];
 }
 
 export interface AdminSubmission {

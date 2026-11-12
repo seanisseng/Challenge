@@ -137,7 +137,7 @@ def test_reference_url_reaches_both_snapshot_audiences(monkeypatch):
     monkeypatch.setattr(repo, "get_session", lambda _: session)
     monkeypatch.setattr(repo, "active_challenges", lambda _: [{"id": "challenge", "title": "Pose", "image_path": "session/ref.jpg"}])
     monkeypatch.setattr(repo, "public_asset_url", lambda path: f"https://assets/{path}")
-    for name in ["progress", "list_teams", "list_members", "session_submissions", "team_submissions", "team_clues", "queued_challenges"]:
+    for name in ["progress", "list_teams", "list_members", "session_submissions", "team_submissions", "team_clues", "queued_challenges", "recent_clue_awards"]:
         monkeypatch.setattr(repo, name, lambda _: [])
     member = {"id": "member", "name": "Player", "session": session, "team": {"id": "team", "name": "Team"}}
     core = snapshots.session_core("session")

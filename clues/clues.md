@@ -1,7 +1,13 @@
 # Destination clues — consolidated review draft
 
-**Status: awaiting wording approval. Nothing in this document has been populated
-in the database.**
+**Status: approved for population by the user and imported on 2026-11-12.**
+
+All 24 player-facing titles and bodies were loaded into the active **Game 2**
+session (`PSA62S`, `6f783270-30ed-483d-a52b-6950ae0013a8`) in Supabase project
+`ceqfgjqwvuqhtsbmxfdn`. Read-back verified eight per tier and 24 exact content
+matches. Host-only notes were excluded; the other lobby session was untouched.
+Challenge-to-clue assignments and reward-selection behavior were not changed:
+unassigned challenges currently default to the first clue in their tier.
 
 24 clues: **eight per tier**. The latest difficulty direction supersedes the
 earlier macro / landmark / exact-pin approach:
@@ -70,8 +76,8 @@ feel like winning a usable tool rather than another cryptic fragment.
 
 This revision deliberately raises Tier 3's reward: T3-06 decodes to the full
 destination name; T3-07 identifies a specific stop; T3-08 reconstructs an address
-search. None supplies a finish pin or exact on-site check-in spot. The user must
-review this stronger difficulty before population. Tier 1 remains unchanged.
+search. None supplies a finish pin or exact on-site check-in spot. The user
+subsequently authorized population of this wording. Tier 1 remains unchanged.
 
 ---
 
@@ -169,8 +175,8 @@ The intended distinction is information value as well as puzzle form:
   T3-02 still gives a broad area; T3-03 narrows it; T3-06 and T3-07 can reveal
   the destination name. These are deliberately unequal strengths within the tier.
 - T3-06 is a major difficulty change from the previous draft: a team can decode
-  the full destination name from one reward. This is a proposed wording change,
-  not an approved game setting. Review before population.
+  the full destination name from one reward. This stronger wording was included
+  in the user's subsequent population request.
 - Repeated information is intentional: the eight rewards use a limited set of
   existing destination facts. T3-03 explains T1-04; T3-05 explains T1-06;
   T3-07 explains T1-02. Tier 1 wording has not changed.
@@ -183,13 +189,15 @@ The intended distinction is information value as well as puzzle form:
 ## Review and population boundary
 
 - This is the single review document; `clues.draft.md` is superseded.
-- Review the 24 clue bodies and their difficulty before database population.
+- The user authorized population of the 24 clue bodies after the wording review.
 - Source facts and the host-only answer key are not player clues and must not
   be included in the database's player-facing clue bodies or media links.
-- No database records, reward-selection rules, API calls, data models, routes
-  or host clue controls were changed while preparing this copy.
+- Population inserted 24 clue records in the active session. Reward-selection
+  rules, challenge assignments, API calls, data models, routes and host clue
+  controls were unchanged.
 - The intended product direction remains prepopulated clues, rather than
-  host-authored clues. Implementing that comes after wording approval.
+  host-authored clues. This import populates the current active session only;
+  automatic seeding of future sessions has not been implemented.
 
 ## Reference checks
 
