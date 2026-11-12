@@ -3,15 +3,16 @@
 **Status: awaiting wording approval. Nothing in this document has been populated
 in the database.**
 
-18 clues: **six per tier**. The latest difficulty direction supersedes the
+24 clues: **eight per tier**. The latest difficulty direction supersedes the
 earlier macro / landmark / exact-pin approach:
 
 - **Tier 1:** real information stripped of context. Weak alone, useful when
   another clue explains what the fragment belongs to.
 - **Tier 2:** strange riddle fragments. Three or four should start forming a
   useful picture; one should be difficult to place.
-- **Tier 3:** stronger, deliberately solvable puzzles. One gives a promising
-  direction after interpretation, rather than naming the finish or its anchors.
+- **Tier 3:** explicit solving instructions and a concrete answer to search or
+  use. A single solved clue should materially advance the team. The encrypted
+  destination-name clue is intentionally the strongest reward in this draft.
 
 Clues can be collected in any order. The host-only material below explains the
 intended connections; it must not appear in player-facing clue content.
@@ -26,6 +27,8 @@ intended connections; it must not appear in player-facing clue content.
 | T1-04 | A little letter, a little number, a little trouble! | C1 |
 | T1-05 | Green, green, what could it mean? | Green. |
 | T1-06 | Someone's singing, but who's listening? | Siren. |
+| T1-07 | A little grit in the mystery! | Sand. |
+| T1-08 | Three digits looking for a job! | 401 |
 
 Each fragment is genuinely relevant, but its title and body do not say whether
 it represents a colour, route, address, stop, parking area or part of a name.
@@ -42,6 +45,8 @@ a label such as "Bus stop" would supply context the player is meant to discover.
 | T2-04 | A Silent Conversation | One neighbour speaks to travellers who never set foot on these paths. Look nearby, not beneath it. |
 | T2-05 | An Argument in the Air | An argument is stretched tight between two sides. Its punctuation travels through air; the floor remembers the shore. |
 | T2-06 | A Song with No Sound | Two tails wait inside a circle. Nobody here has come to hear the song. |
+| T2-07 | A Place to Stop | Third in the procession, first in the count. Together they tell tired wheels where to rest. |
+| T2-08 | The Name's Last Breath | The name ends where blue and yellow stop being separate. Find the beginning elsewhere. |
 
 These fragments should become more useful together. They deliberately avoid
 proper place names, numeric directions, bus codes, coordinates and exact ranges.
@@ -50,18 +55,23 @@ proper place names, numeric directions, bus codes, coordinates and exact ranges.
 
 | ID | Title | Player-facing clue |
 |---|---|---|
-| T3-01 | A Memory of Trees | Old tree resin lends its name to a watchman who guides travellers without roads. Find his neighbourhood; he is not the finish. |
-| T3-02 | Borrow the Morning | Borrow the direction of sunrise. Find the long playground where bicycle wheels trace the edge of salt water. Your search belongs there. |
-| T3-03 | Reserved Space | Take the alphabet's third letter and the first positive counting number. Together they mark a place where journeys are parked. Search nearby, not between the cars. |
-| T3-04 | A Conversation Over the Line | The ball must not touch the floor, yet the floor is a beach. A net divides the conversation. Find this game, then search the gathering places nearby. |
-| T3-05 | The Sleepless Singer | Find the two-tailed singer who sells a wake-up call. She is a neighbour, not the finish. |
-| T3-06 | The Last Word | Mix blue and yellow. Keep the result for the end of the destination's name. What comes before it is still yours to find. |
+| T3-01 | Two Words, One Tower | Solve two words: fossilised tree resin; a light that guides ships. Put them together and search for the tower with that name in Singapore. The finish is nearby, not at the tower. |
+| T3-02 | Build the Park | Solve these three words in order: opposite of WEST; where the sea meets the land; a public recreation space. Read them as one place name. That is the park containing the finish. Now mix blue and yellow: the resulting colour is the final word of your destination's name. |
+| T3-03 | Park the Answer | Use A=1, B=2, C=3. Decode 3, then place the digit 1 after it. In the coastal park, this is your carpark reference. Search its surrounding recreation area, not the parking bays. |
+| T3-04 | Name the Game | Unscramble BEACH + L L V O E Y B A L L. Find the court for that sport near the finish. The court and a coffee outlet with a two-tailed logo are both nearby. |
+| T3-05 | Read the Starts | Take the first letter of each word: Sailors Trade Amber Rings Before Unusual Coastal Kings Sing. Search the resulting coffee brand in the coastal park; the finish is near that outlet. |
+| T3-06 | Three Steps Back | SDUNODQG JUHHQ. Every letter has moved three places forward in the alphabet. Move each one three places back, keeping the space. The answer is the destination's name. |
+| T3-07 | Five Answers, One Stop | Calculate separately: 3 squared; 1+1; 6 divided by 3; 10 divided by 2; 4 minus 3. Join the five answers in order. Look up that Singapore bus-stop code: its name identifies the area opposite the finish. You do not need to board a bus. |
+| T3-08 | An Address in Pieces | Nine hundred plus twenty gives the street number. Take the initials of East Coast Parkway for the road. Search the number and initials together in Singapore: the finish is in that recreation and dining area. |
 
-Tier 3 gives more decoding structure than Tier 2, but does not print the park
-name, beacon name, carpark label, route number or final name fragment directly.
-No player clue supplies the full destination name, complete street address,
-postal code, coordinates or finish link. Tier 1 intentionally includes a real
-stop number without identifying it as one, as requested.
+Tier 2 asks players to interpret imagery and combine fragments. Tier 3 supplies
+an operation, an answer category and an action to take after solving. It should
+feel like winning a usable tool rather than another cryptic fragment.
+
+This revision deliberately raises Tier 3's reward: T3-06 decodes to the full
+destination name; T3-07 identifies a specific stop; T3-08 reconstructs an address
+search. None supplies a finish pin or exact on-site check-in spot. The user must
+review this stronger difficulty before population. Tier 1 remains unchanged.
 
 ---
 
@@ -103,6 +113,8 @@ procedure has been invented. Confirm the physical meeting spot before the game.
 | T1-04: C1 | The nearby carpark / park-area reference. |
 | T1-05: Green | The last word of the destination's name. |
 | T1-06: Siren | The figure in the Starbucks logo, without naming the outlet. |
+| T1-07: Sand | The surface of the nearby beach volleyball court; also links to the coastal setting. |
+| T1-08: 401 | The supplied bus service serving stop 92251. No boarding or operating-day assumption is required. |
 
 The stop number is intentionally genuine. A player who recognises it as a
 Singapore bus-stop code can look it up and get a strong shortcut. This follows
@@ -119,6 +131,8 @@ team recognises the fragment's context.
 | T2-04 | Travellers who do not walk the park paths are vessels; the neighbour is a maritime beacon. The finish is nearby, not the beacon. |
 | T2-05 | Two sides, an airborne ball and a sandy floor suggest beach volleyball. The stretched argument is the net. |
 | T2-06 | The circle and two tails suggest the Starbucks siren logo. Without the other fragments, the clue does not identify a particular outlet. |
+| T2-07 | Third in the alphabet = C; first counting number = 1; resting wheels = parking. Together they suggest C1 and a carpark. |
+| T2-08 | Blue and yellow mix to green, the final word in the destination name. The name's beginning is withheld. |
 
 Example combinations:
 
@@ -138,33 +152,38 @@ destination before approving their difficulty.
 
 | Clue | Intended decoding | What remains unsolved |
 |---|---|---|
-| T3-01 | Old tree resin = amber; a watchman guiding travellers without roads = a maritime beacon. Together they suggest Amber Beacon. | The finish is nearby, not the landmark itself. |
-| T3-02 | Sunrise = east; salt water = coast; bicycle playground = a recreational park. Together these suggest East Coast Park. | The park is large; the finishing area still needs narrowing down. |
-| T3-03 | Third letter = C; first positive counting number = 1; parked journeys = a carpark. Decode Carpark C1. | Establish which park and find the nearby finishing area. |
-| T3-04 | An airborne ball passed over a net on sand suggests beach volleyball. | Identify the right court and the nearby gathering area; the court is not the finish. |
-| T3-05 | A two-tailed singer = a siren; selling a wake-up call suggests coffee. Together these identify Starbucks. | Work out which outlet, then locate the actual finishing area nearby. |
-| T3-06 | Blue mixed with yellow = green; it belongs at the end of the destination's name. | Discover the first part of the name and locate the venue. |
+| T3-01 | Fossilised resin = amber; guiding light = beacon. Search Amber Beacon Tower. | Locate the nearby finish rather than stopping at the tower. |
+| T3-02 | Opposite of west = east; sea/land boundary = coast; recreation space = park. East Coast Park. Blue and yellow mix to green, the destination's final word. | Identify the finishing area within the park using the final word Green. |
+| T3-03 | A1Z26: 3 = C, followed by 1. Carpark C1. | Identify the coastal park and the nearby finish. |
+| T3-04 | The letters unscramble to VOLLEYBALL; with BEACH, identify beach volleyball. The coffee-logo pairing adds a second local feature. | Locate the correct court/outlet pair and actual meeting spot. |
+| T3-05 | The nine initials spell STARBUCKS. | Find the relevant coastal-park outlet and nearby finish. |
+| T3-06 | Caesar shift back three: SDUNODQG JUHHQ = PARKLAND GREEN. | Locate the actual meeting spot within the named destination. |
+| T3-07 | The five results are 9, 2, 2, 5, 1. Stop 92251 is the supplied Opp Parkland Green stop. | Find the actual finish; the bus stop is not the meeting spot. |
+| T3-08 | 900+20 = 920; East Coast Parkway initials = ECP. Search 920 ECP. | Find the actual finish within the recreation/dining area. |
 
-- **T3-01 + T3-05** should establish an amber-named beacon and a nearby Starbucks.
-- **T3-02 + T3-03** should establish the park and a useful carpark anchor.
-- **T3-02 + T3-06** should make the destination name easier to work out, rather
-  than handing it over in a single clue.
-- **T3-04 + T3-05** gives a beach-volleyball / Starbucks pairing to investigate;
-  **T3-03** adds the C1 anchor to narrow it further.
-- **T1-01 + T3-01** links the unexplained yellow colour to the beacon;
-  **T1-03 + T3-04** explains the net fragment; **T1-06 + T2-06 + T3-05** turns a
-  mysterious siren into an identifiable logo and outlet type.
-- The original northward direction from the beacon is still available as a
-  host-only reference inferred from the two supplied coordinates.
-  Their straight-line separation is approximately 186 metres, bearing about
-  34 degrees. These measurements are host-only and are not walking directions.
-- The earlier direct park, beacon and carpark names have been replaced with
-  decoding prompts. GPS, complete address and map-link answers remain host-only.
+The intended distinction is information value as well as puzzle form:
+
+- Tier 2 leaves both the meaning and the connection uncertain. Multiple clues
+  should reinforce a location hypothesis.
+- Tier 3 states a solving method and identifies what its answer represents.
+  T3-02 still gives a broad area; T3-03 narrows it; T3-06 and T3-07 can reveal
+  the destination name. These are deliberately unequal strengths within the tier.
+- T3-06 is a major difficulty change from the previous draft: a team can decode
+  the full destination name from one reward. This is a proposed wording change,
+  not an approved game setting. Review before population.
+- Repeated information is intentional: the eight rewards use a limited set of
+  existing destination facts. T3-03 explains T1-04; T3-05 explains T1-06;
+  T3-07 explains T1-02. Tier 1 wording has not changed.
+- The host-supplied court and outlet observations are retained without claiming
+  a specific court entrance, outlet unit or walking route.
+- The supplied beacon and finish coordinates imply roughly 186 metres of
+  straight-line separation, bearing about 34 degrees. This remains host-only
+  context, not a player walking instruction.
 
 ## Review and population boundary
 
 - This is the single review document; `clues.draft.md` is superseded.
-- Review the 18 clue bodies and their difficulty before database population.
+- Review the 24 clue bodies and their difficulty before database population.
 - Source facts and the host-only answer key are not player clues and must not
   be included in the database's player-facing clue bodies or media links.
 - No database records, reward-selection rules, API calls, data models, routes
