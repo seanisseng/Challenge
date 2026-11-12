@@ -6,8 +6,9 @@ All 24 player-facing titles and bodies were loaded into the active **Game 2**
 session (`PSA62S`, `6f783270-30ed-483d-a52b-6950ae0013a8`) in Supabase project
 `ceqfgjqwvuqhtsbmxfdn`. Read-back verified eight per tier and 24 exact content
 matches. Host-only notes were excluded; the other lobby session was untouched.
-Challenge-to-clue assignments and reward-selection behavior were not changed:
-unassigned challenges currently default to the first clue in their tier.
+On 2026-11-12, reward selection was updated through migration 19: every approved
+challenge randomly awards one clue in its tier that the team does not already
+own. Challenge-to-clue assignments do not override this draw.
 
 24 clues: **eight per tier**. The latest difficulty direction supersedes the
 earlier macro / landmark / exact-pin approach:

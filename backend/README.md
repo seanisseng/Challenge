@@ -122,9 +122,13 @@ submission_events *---1 submissions
 - **Atomic approval.** `approve_submission()` runs in one transaction: marks
   the winner, claims the challenge, grants the matching tier clue, auto-rejects
   rival pending submissions, and refills the board.
-- **Clue fallback.** A challenge points at a clue only through `clue_tier`.
-  `approve_submission` uses `challenges.clue_id` when set, otherwise the first
-  clue of that tier in the session.
+- **Clue rewards.** For every approved challenge, `approve_submission` filters
+  the session's clues to the rewarded tier, excludes clues the winning team
+  already owns, and randomly grants one remaining clue. `challenges.clue_id`
+  does not override the draw. Teams can collect multiple clues per tier;
+  another team's inventory does not affect eligibility. If the team has
+  exhausted the tier, approval succeeds without repeating an owned clue.
+  This behavior requires migration `20260101000019` on the hosted database.
 
 ## RPC reference
 
@@ -291,6 +295,14 @@ Timestamp-prefixed SQL in `supabase/migrations/`:
 | `*_0015_board_reveal_events` | durable reveal identity for the player card-flop animation |
 | `*_0016_queue_order_and_discards` | session-local removal, eligible-only refill and queue reordering |
 | `*_0017_queue_conflict_response` | explicit HTTP conflict response for stale queue saves |
+| `*_0018_approval_lock_order_and_clue_rotation` | one lock order for approve/reject/discard, clue fallback skips clues the team owns |
+| `*_0019_random_unowned_clue_rewards` | every approved challenge randomly awards one same-tier clue the winning team does not own |
+
+`*_0018` is applied on the hosted project. It removes the `40P01` deadlock
+between concurrent approvals and makes repeat wins of a clue tier rotate to the
+next clue the team does not own. See `docs/backend-100-users.md` for the full
+capacity work. Migration `*_0019` is also applied and supersedes the ordered
+clue fallback with a random draw from the team's remaining clues in that tier.
 
 To change the schema, add a new timestamped file to `supabase/migrations/` and
 apply it to the project (SQL editor, `psql $DATABASE_URL`, or the Supabase MCP
