@@ -214,6 +214,10 @@ export function fetchAdminState(sessionId: string): Promise<AdminState> {
   return request<AdminState>(`/api/admin/sessions/${sessionId}/state`);
 }
 
+export function deleteSession(sessionId: string): Promise<{ ok: boolean }> {
+  return request(`/api/admin/sessions/${sessionId}`, { method: "DELETE" });
+}
+
 export function startSession(sessionId: string): Promise<{ ok: boolean }> {
   return request<{ ok: boolean }>(`/api/admin/sessions/${sessionId}/start`, {
     method: "POST",

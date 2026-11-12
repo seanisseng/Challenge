@@ -58,6 +58,18 @@ class Hub:
     def presence(self, session_id: str) -> int:
         return len(self._room(session_id))
 
+    async def close_room(self, session_id: str) -> None:
+        """Disconnect a deleted session without rebuilding its missing snapshot."""
+        async def close(sub: Subscriber) -> None:
+            try:
+                await asyncio.wait_for(sub.ws.close(), timeout=1.0)
+            except Exception:
+                log.debug("could not close deleted session subscriber", exc_info=True)
+            finally:
+                await self.unregister(sub)
+
+        await asyncio.gather(*(close(sub) for sub in self._room(session_id)))
+
     async def _send(self, sub: Subscriber, payload: dict[str, Any]) -> None:
         try:
             await asyncio.wait_for(sub.ws.send_json(payload), timeout=SEND_TIMEOUT)

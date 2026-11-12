@@ -2,6 +2,53 @@
 
 Updated 2026-11-12
 
+## Latest: random clue rewards and session deletion
+
+- Migration `20260101000019_random_unowned_clue_rewards.sql` is applied to
+  Supabase. Every approved challenge filters clues by session and rewarded
+  tier, excludes clues the winning team owns, and grants one random remaining
+  clue. Bound challenge clues do not override this draw. Exhausted tiers do
+  not repeat clues. Verified the committed function and permissions on a fresh
+  database connection; see `docs/random-clue-rewards-verification.md`.
+- Hosts can delete a session from its header or the session picker, with a
+  named confirmation, busy state and error retry. The authenticated delete
+  endpoint removes its game records and disconnects its room. Storage objects
+  are retained. No migration required; existing games were not deleted for
+  verification. See `docs/delete-session-verification.md`.
+- Team progress now uses shared tier stickers and cards in the player and host
+  views; missing tier breakdowns are labelled explicitly. See
+  `docs/team-stickers-verification.md`.
+- Pre-push verification: full local backend suite passed (three hosted tests
+  skipped), frontend production build and 17 unit tests passed, and selected
+  desktop/phone/WebKit browser regressions passed 21 tests with six viewport
+  skips. No dependency manifests or lockfiles changed in this release.
+- Dependency audits found existing findings: `npm audit` reports three affected
+  packages (Vite high, esbuild and postcss-selector-parser moderate).
+  `pip-audit` reports certifi 2026.7.22 advisory `PYSEC-2026-4320`, fixed in
+  2026.10.18 (the tool printed the same advisory twice). These remain open;
+  dependency upgrades were not included in the feature commits.
+
+## Latest: backend capacity work (100 concurrent users)
+
+- Fixed the intermittent backend failures. Root causes: one shared HTTP/2
+  connection for every request thread (Supabase aborted it under upload bursts),
+  approve/discard taking row locks in opposite orders (`40P01 deadlock
+  detected`), a clue fallback that always returned the first clue of a tier, and
+  a per-device snapshot fan-out (2 queries per phone per broadcast).
+- Backend now owns an HTTP/1.1 pool (50 connections) with retries, retries
+  deadlocks in `repo.rpc`, batches each broadcast into 8 queries
+  (`snapshots.room_data`), and sends WebSocket payloads concurrently with a 5s
+  timeout so one dead phone cannot stall the room.
+- Migration `20260101000018_approval_lock_order_and_clue_rotation.sql` fixes the
+  lock order and makes repeat wins of a tier rotate to the next unowned clue.
+  **Applied to the hosted project on 2026-11-12.** Verified: three Tier-1 wins
+  now unlock `Clue 0`, `Clue 1`, `Clue 2` (was `Clue 0` three times), and the
+  deadlock probe reports zero `deadlock detected` across 12 racing cases.
+- Measured after the migration: 100 concurrent uploads and 100 concurrent
+  snapshot builds with zero failures; the full backend suite passes with live
+  tests enabled (83 at the time of writing). Details: `docs/backend-100-users.md`.
+- The hub is still in-process, so `--workers N` needs shared pub/sub first.
+
 ## Latest feature: review-result notifications
 
 - Own new clue: themed private success modal, eight-second auto-close, early
@@ -85,8 +132,10 @@ Updated 2026-11-12
 - Read-back verified all 24 titles/bodies exactly against `clues/clues.md`.
   Host-only answers/notes were excluded and the other lobby session untouched.
 - Existing challenge assignments/reward logic were preserved. Unassigned
-  challenges still default to the first clue per tier; distribution of the
+  challenges still start at the first clue per tier; distribution of the
   complete pack across challenge rewards remains a separate follow-up.
+  (Superseded in part by migration `0018`: a repeat win of a tier now rotates to
+  the next clue the team does not own instead of being silently dropped.)
 - Historical statements below about pending clue approval and no database writes
   describe the earlier UI pass and are superseded by this population record.
 

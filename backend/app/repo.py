@@ -172,6 +172,16 @@ def get_session(session_id: str) -> dict[str, Any]:
     return rows[0]
 
 
+def delete_session(session_id: str) -> None:
+    """Delete one session; foreign keys cascade its game records."""
+    try:
+        rows = _select("game_sessions").delete().eq("id", session_id).execute().data
+    except APIError as exc:
+        raise _to_http(exc) from exc
+    if not rows:
+        raise HTTPException(status_code=404, detail="session not found")
+
+
 def set_session_status(session_id: str, status: str) -> None:
     payload: dict[str, Any] = {"status": status}
     now = datetime.now(timezone.utc).isoformat()

@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { AdminBoard, AdminBoardSkeleton } from "../components/AdminBoard";
 import { ReviewTab, CodesTab, CluesTab, ProgressTab } from "../components/RaceHostViews";
 import { BoardUnavailable, ConnectionNotice } from "../components/ConnectionNotice";
+import { DeleteSessionButton } from "../components/DeleteSessionButton";
 import { ArrowLeftRight, Flag, LogOut, PlaneTakeoff, Users } from "lucide-react";
 
 import {
@@ -114,6 +115,17 @@ export default function AdminConsole({ onSignOut }: Props) {
     setTab("board");
   };
 
+  const sessionDeleted = (id: string) => {
+    setSessions(current => current.filter(entry => entry.id !== id));
+    if (sessionId === id) {
+      setAdminSession(null);
+      setSessionId(null);
+      setState(null);
+      setLoading(false);
+    }
+    setError(null);
+  };
+
   const pendingCount = useMemo(
     () => (state?.submissions ?? []).filter((s) => s.status === "pending").length,
     [state],
@@ -141,6 +153,7 @@ export default function AdminConsole({ onSignOut }: Props) {
           selectSession(id);
         }}
         onError={(message) => setError(message)}
+        onDeleted={sessionDeleted}
         onSignOut={onSignOut}
       />
     );
@@ -185,9 +198,10 @@ export default function AdminConsole({ onSignOut }: Props) {
             {entry.label}{entry.badge ? <span className="nav-count">{entry.badge}</span> : null}
           </button>)}
         </nav>
-        {session.status === "active" ? <div className="header-danger-zone"><button type="button" className="header-end-game" onClick={() => {
+        <div className="header-danger-zone">{session.status === "active" ? <button type="button" className="header-end-game" onClick={() => {
           if (window.confirm("End the game for everyone?")) void run(() => endSession(session.id), "could not end session");
-        }}><Flag size={15} aria-hidden="true" />End game</button></div> : null}
+        }}><Flag size={15} aria-hidden="true" />End game</button> : null}
+        <DeleteSessionButton session={session} onDeleted={sessionDeleted} /></div>
         </div>
       </header>
       <main className="race-main">
@@ -253,6 +267,7 @@ function SessionPicker({
   onCreated,
   onError,
   onSignOut,
+  onDeleted,
 }: {
   sessions: SessionSummary[];
   loading: boolean;
@@ -261,6 +276,7 @@ function SessionPicker({
   onCreated: (id: string) => void;
   onError: (message: string) => void;
   onSignOut: () => void;
+  onDeleted: (id: string) => void;
 }) {
   const [name, setName] = useState("");
   const [teamCount, setTeamCount] = useState(4);
@@ -379,7 +395,7 @@ function SessionPicker({
         ) : (
           <ul className="card divide-y divide-slate-200 overflow-hidden">
             {sessions.map((entry) => (
-              <li key={entry.id}>
+              <li key={entry.id} className="flex items-center">
                 <button
                   type="button"
                   onClick={() => onSelect(entry.id)}
@@ -401,6 +417,7 @@ function SessionPicker({
                     Open →
                   </span>
                 </button>
+                <DeleteSessionButton session={entry} onDeleted={onDeleted} compact />
               </li>
             ))}
           </ul>

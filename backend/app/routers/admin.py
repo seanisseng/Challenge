@@ -69,6 +69,13 @@ def session_state(session_id: str) -> dict[str, Any]:
     return snapshots.admin_payload(session_id)
 
 
+@router.delete("/sessions/{session_id}")
+def delete_session(session_id: str, background: BackgroundTasks) -> dict[str, Any]:
+    repo.delete_session(session_id)
+    background.add_task(hub.close_room, session_id)
+    return {"ok": True}
+
+
 @router.post("/sessions/{session_id}/start")
 def start_session(session_id: str, background: BackgroundTasks) -> dict[str, Any]:
     repo.set_board_visibility(session_id, True)
