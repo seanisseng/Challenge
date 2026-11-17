@@ -81,3 +81,20 @@ a fallback.
 
 Neither token grants direct database access - both are checked by the backend
 on every request.
+
+## Map appearance
+
+The map uses OpenMapTiles vector data hosted by OpenFreeMap, rendered through
+MapLibre's Leaflet layer. Leaflet still handles game overlays and interaction.
+`public/game-map-style.json` is a local adaptation of OpenFreeMap's Liberty
+style, with turquoise water, soft green parks, pale land and yellow roads.
+Tiles, fonts and sprites need network access; no API key is required.
+Set `VITE_MAP_STYLE_URL` in `frontend/.env` to use a different style endpoint.
+The previous raster `VITE_MAP_TILE_URL` setting is superseded by this option.
+
+The map fills 78% of the viewport height, with a 420px minimum. The player Map
+tab also uses the full available content width. Controls and team details stay
+below the map.
+
+Style source: https://tiles.openfreemap.org/styles/liberty
+Original design and license: https://github.com/maputnik/osm-liberty

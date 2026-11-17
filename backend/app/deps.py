@@ -3,8 +3,8 @@
 Two credentials exist, both plain headers:
 
 * ``X-Admin-Token`` -- HMAC derived from ``ADMIN_PIN``, proves you are the host.
-* ``X-Team-Token``  -- a per-device UUID minted when a player redeems a team
-  join code. Many devices share a team; each has its own token.
+* ``X-Team-Token``  -- a shared team credential returned when a device redeems
+  its team code. Legacy device tokens remain valid for their original team.
 """
 
 from __future__ import annotations

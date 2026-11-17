@@ -8,15 +8,25 @@ Supabase directly.
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from app.map_runtime import map_runtime
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import admin, play, ws
+from app.routers import admin, play, ws, maps
 
 settings = get_settings()
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await map_runtime.start()
+    try:yield
+    finally:await map_runtime.close()
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Challenge — Scavenger Hunt API",
     version="0.2.0",
     description="Real-time competitive scavenger hunt with team join codes.",
@@ -34,6 +44,8 @@ app.include_router(admin.public_router)
 app.include_router(admin.router)
 app.include_router(play.router)
 app.include_router(ws.router)
+app.include_router(maps.admin)
+app.include_router(maps.players)
 
 
 @app.get("/health", tags=["meta"])

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Page, WebSocketRoute } from "@playwright/test";
-import type { AdminState, Challenge } from "../../src/lib/types";
+import type { AdminState, Challenge, Clue } from "../../src/lib/types";
 
 const rows = readFileSync(resolve("../challenges/challenges.md"), "utf8").split(/\r?\n/)
   .map(line => line.replace(/^\||\|$/g, "").split("|").map(cell => cell.trim()))
@@ -24,7 +24,7 @@ export function fixtureState(): AdminState {
   };
 }
 
-export async function installBoardFixture(page: Page, options: { empty?: boolean; slow?: boolean; unavailable?: boolean } = {}) {
+export async function installBoardFixture(page: Page, options: { empty?: boolean; slow?: boolean; unavailable?: boolean; clues?: Clue[] } = {}) {
   const state = fixtureState();
   if (options.empty) { state.board = []; state.queue = []; state.submissions = []; }
   const mutations: { path: string; body: unknown }[] = [];
@@ -39,7 +39,7 @@ export async function installBoardFixture(page: Page, options: { empty?: boolean
     const url = new URL(route.request().url());
     if (offline) { await route.abort("failed"); return; }
     if (url.pathname.endsWith("/photo")) { await route.fulfill({ json: { url: "/reference.jpg" } }); return; }
-    if (url.pathname.endsWith("/clues")) { await route.fulfill({ json: [] }); return; }
+    if (url.pathname.endsWith("/clues")) { await route.fulfill({ json: options.clues ?? [] }); return; }
     if (options.slow && url.pathname.endsWith("/state")) await new Promise(resolve => setTimeout(resolve, 1500));
     if (route.request().method() === "POST") {
       const body = route.request().postDataJSON();
@@ -71,5 +71,5 @@ export async function installBoardFixture(page: Page, options: { empty?: boolean
     if (offline) ws.close({ code: 1001 });
     else if (!options.slow) ws.send(JSON.stringify(state));
   });
-  return { state, mutations, disconnect: () => { offline = true; socket?.close({ code: 1001 }); }, reconnect: () => { offline = false; } };
+  return { state, mutations, push: () => socket?.send(JSON.stringify(state)), disconnect: () => { offline = true; socket?.close({ code: 1001 }); }, reconnect: () => { offline = false; } };
 }

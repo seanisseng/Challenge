@@ -22,7 +22,7 @@ class SessionCreateRequest(BaseModel):
 
 class JoinRequest(BaseModel):
     code: str = Field(min_length=1, max_length=16)
-    name: str = Field(min_length=1, max_length=40)
+    name: str | None = Field(default=None, max_length=40)  # Legacy clients; ignored.
 
 
 class ReviewRequest(BaseModel):
@@ -42,9 +42,5 @@ class ChallengeCreateRequest(BaseModel):
     sort_order: int = 0
 
 
-class ClueCreateRequest(BaseModel):
-    tier: str = Field(pattern="^tier[123]$")
-    title: str = Field(min_length=1, max_length=120)
-    body: str = Field(min_length=1, max_length=1000)
-    media_url: str | None = Field(default=None, max_length=500)
-    sort_order: int = 0
+class TeamNameRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=40)

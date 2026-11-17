@@ -1,4 +1,4 @@
-import { Ticket, Users } from "lucide-react";
+import { Ticket } from "lucide-react";
 import type { TeamProgress, Tier } from "../lib/types";
 import { TeamLabelSticker, TierSticker, type StickerTier } from "./TierSticker";
 
@@ -24,7 +24,6 @@ export function TeamProgressCards({ rows, counts, ownTeamId, codes, finishedTeam
           {row.team_id === leader ? <TeamLabelSticker label="LEADING" /> : null}
         </div>
         <div className="team-card-heading"><strong title={row.team_name}>{row.team_name}</strong>
-          <span className="team-card-members"><Users size={15} aria-hidden="true" />{row.member_count} {row.member_count === 1 ? "player" : "players"}</span>
         </div>
         {host ? <p className="team-card-code">JOIN CODE <span>{codes?.[row.team_id] ?? "—"}</span></p> : null}
         <div className="team-card-collection"><div className="team-card-stickers" role={completeBreakdown ? "group" : "img"}

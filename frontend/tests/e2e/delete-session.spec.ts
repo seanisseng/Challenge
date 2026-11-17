@@ -40,13 +40,13 @@ test("session picker deletion preserves the session on error and allows retry", 
   });
   await page.goto("/admin");
   await page.getByRole("button", { name: "Switch session", exact: true }).click();
-  await page.getByRole("button", { name: "Delete Game 2", exact: true }).click();
+  await page.getByRole("button", { name: "Delete session Game 2", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Delete Game 2?", exact: true });
   await dialog.getByRole("button", { name: "Delete permanently" }).click();
   await expect(dialog.getByRole("alert")).toHaveText("Please retry deletion");
-  await expect(page.getByRole("button", { name: "Delete Game 2", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Delete session Game 2", exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "Delete permanently" }).click();
   await expect(dialog).not.toBeVisible();
-  await expect(page.getByRole("button", { name: "Delete Game 2", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Delete session Game 2", exact: true })).toHaveCount(0);
   expect(requests).toBe(2);
 });

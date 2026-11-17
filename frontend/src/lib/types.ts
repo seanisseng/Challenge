@@ -1,3 +1,4 @@
+import type { GameMapState } from "./gameMap";
 /**
  * Types mirroring the snapshots the backend pushes over the WebSocket.
  *
@@ -44,6 +45,8 @@ export interface Challenge {
 }
 
 export interface TeamProgress {
+  /** Complete inventory totals; optional while older backends are running. */
+  clue_tier_counts?: Record<Tier, number>;
   team_id: string;
   team_name: string;
   member_count: number;
@@ -80,6 +83,7 @@ export interface ClueAward {
 }
 
 export interface TeamState {
+  map?: GameMapState;
   kind: "team";
   session: SessionInfo;
   me: { id: string; name: string };
@@ -116,6 +120,7 @@ export interface AdminTeam {
 }
 
 export interface AdminState {
+  map?: GameMapState;
   kind: "admin";
   session: SessionInfo;
   board: Challenge[];

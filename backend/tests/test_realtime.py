@@ -60,7 +60,7 @@ def stub_snapshots(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         snapshots,
         "team_payload",
-        lambda member, core=None, room=None: {"kind": "team", "member": member["id"]},
+        lambda member, core=None, room=None,location_until=0: {"kind": "team", "member": member["id"]},
     )
     monkeypatch.setattr(
         snapshots,

@@ -13,6 +13,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
+import secrets
+from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -33,6 +36,14 @@ class Subscriber:
     session_id: str
     kind: str  # "team" | "admin"
     member: dict[str, Any] | None = field(default=None)
+    location_device_id: str | None = None
+    location_lease: str | None = None
+    location_until: float = 0
+    tracking_visible: bool = False
+
+    @property
+    def can_track(self) -> bool:
+        return self.kind=='admin' or self.location_until>time.time()
 
     @property
     def team_id(self) -> str | None:
@@ -85,6 +96,26 @@ class Hub:
             pass
         await self.unregister(sub)
 
+    async def map_event(self, session_id: str, event: dict[str, Any], *, lease: str | None = None) -> None:
+        """Only public map metadata; no game state or private finish in GPS fan-out."""
+        point=event.get('location',event)
+        async def deliver(sub:Subscriber):
+            if sub.kind!='admin' and point.get('team_id')==sub.team_id and point.get('device_id')==sub.location_device_id:
+                if event['kind']=='location_removed':sub.location_until=0
+                elif lease:
+                    sub.location_until=(datetime.fromisoformat(point['updated_at'].replace('Z','+00:00')).timestamp()+120
+                                        if sub.location_lease and secrets.compare_digest(sub.location_lease,lease) else 0)
+            if sub.tracking_visible and not sub.can_track:
+                await self._send(sub,{'kind':'map_access','can_track_teams':False,'session_id':session_id})
+            if not sub.tracking_visible and sub.can_track and sub.kind=='team' and sub.member:
+                sub.tracking_visible=True
+                payload=await asyncio.to_thread(snapshots.team_payload,sub.member,location_until=sub.location_until)
+                await self._send(sub,payload)
+            sub.tracking_visible=sub.can_track
+            if sub.can_track or point.get('team_id')==sub.team_id:
+                await self._send(sub,{**event,'session_id':session_id})
+        await asyncio.gather(*(deliver(sub) for sub in self._room(session_id)))
+
     async def broadcast(self, session_id: str) -> None:
         """Rebuild and push a snapshot to everyone watching this session.
 
@@ -108,7 +139,8 @@ class Hub:
                 if sub.kind == "admin":
                     payload = snapshots.admin_payload(sub.session_id, room=data)
                 elif sub.member is not None:
-                    payload = snapshots.team_payload(sub.member, room=data)
+                    payload = snapshots.team_payload(sub.member, room=data,location_until=sub.location_until)
+                    sub.tracking_visible=sub.can_track
                 else:
                     continue
             except Exception:

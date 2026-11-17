@@ -1,5 +1,9 @@
 # Private review dialogs and public clue notices — 2026-11-12
 
+**Updated 2026-11-16:** success is restored to 8 seconds; rejection remains 8 seconds.
+Desktop/phone clock-controlled browser checks verify the new durations. Rival
+notices are unchanged.
+
 The user requested a celebration when a team acquires a clue, quiet rival-team
 announcements, and a private rejection dialog with highlighted host feedback.
 
@@ -10,7 +14,7 @@ announcements, and a private rejection dialog with highlighted host feedback.
   seconds or earlier using Close/Escape/the backdrop.
 - Newly rejected private submission IDs trigger “Submission rejected,” with the
   host's review note prominently highlighted. Missing notes are explicitly
-  identified. It closes after twelve seconds or earlier, and offers Back to board.
+  identified. It closes after eight seconds or earlier, and offers Back to board.
 - Own review outcomes queue rather than mounting multiple competing dialogs.
   The underlying proof sheet closes; shared scroll locking prevents body-scroll
   leaks when native dialogs briefly overlap during the same snapshot update.

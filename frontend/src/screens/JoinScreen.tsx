@@ -11,7 +11,6 @@ interface Props {
 
 export default function JoinScreen({ onJoined, onAdmin }: Props) {
   const [code, setCode] = useState("");
-  const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,7 +20,7 @@ export default function JoinScreen({ onJoined, onAdmin }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const state = await joinTeam(code, name);
+      const state = await joinTeam(code);
       onJoined(state);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "something went wrong");
@@ -39,8 +38,8 @@ export default function JoinScreen({ onJoined, onAdmin }: Props) {
           Join your team
         </h1>
         <p className="mx-auto mt-2 max-w-sm text-base leading-relaxed text-slate-600">
-          Type the code your host gave you, then your name. Everyone on your
-          team can use the same code from their own phone.
+          Enter your team code to join or return. Everyone on the team shares
+          the same clues, submissions and progress.
         </p>
       </header>
 
@@ -62,20 +61,6 @@ export default function JoinScreen({ onJoined, onAdmin }: Props) {
           />
         </label>
 
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">
-            Your name
-          </span>
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="Alex"
-            maxLength={40}
-            required
-            className="field py-3 text-lg"
-          />
-        </label>
-
         {error ? (
           <p
             role="alert"
@@ -87,10 +72,10 @@ export default function JoinScreen({ onJoined, onAdmin }: Props) {
 
         <button
           type="submit"
-          disabled={busy || code.trim().length === 0 || name.trim().length === 0}
+          disabled={busy || code.trim().length === 0}
           className="btn-primary w-full py-3 text-base"
         >
-          {busy ? "Joining…" : "Join game"}
+          {busy ? "Joining…" : "Join / rejoin team"}
         </button>
       </form>
 

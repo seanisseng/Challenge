@@ -1,8 +1,13 @@
+import { HostMap } from "../components/HostMap";
+import { applyMapEvent,mergeMapSnapshot } from "../lib/gameMap";
+import type { MapEvent } from "../lib/gameMap";
+import "../game-map.css";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { AdminBoard, AdminBoardSkeleton } from "../components/AdminBoard";
 import { ReviewTab, CodesTab, CluesTab, ProgressTab } from "../components/RaceHostViews";
 import { BoardUnavailable, ConnectionNotice } from "../components/ConnectionNotice";
+import { HostSubmissionNotifications } from "../components/HostSubmissionNotifications";
 import { DeleteSessionButton } from "../components/DeleteSessionButton";
 import { ArrowLeftRight, Flag, LogOut, PlaneTakeoff, Users } from "lucide-react";
 
@@ -20,7 +25,6 @@ import {
   getAdminToken,
   listSessions,
   rejectSubmission,
-  removeMember,
   setAdminSession,
 } from "../lib/api";
 import type {
@@ -29,7 +33,7 @@ import type {
 } from "../lib/types";
 import { useLiveSocket } from "../lib/useLive";
 
-type Tab = "review" | "codes" | "board" | "clues" | "progress";
+type Tab = "review" | "codes" | "board" | "clues" | "progress" | "map";
 
 interface Props {
   onSignOut: () => void;
@@ -42,6 +46,7 @@ export default function AdminConsole({ onSignOut }: Props) {
   const [state, setState] = useState<AdminState | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [tab, setTab] = useState<Tab>("board");
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [retrying, setRetrying] = useState(false);
@@ -101,10 +106,11 @@ export default function AdminConsole({ onSignOut }: Props) {
     };
   }, [sessionId, fail]);
 
-  const status = useLiveSocket<AdminState>(
+  const status = useLiveSocket<AdminState | MapEvent>(
     sessionId && adminToken ? adminSocketUrl(adminToken, sessionId) : null,
     (snapshot) => {
-      if (snapshot.kind === "admin") setState(snapshot);
+      if (snapshot.kind === "admin") setState(current=>({...snapshot,map:current?.session.id===snapshot.session.id?mergeMapSnapshot(current.map,snapshot.map):snapshot.map}));
+      else setState(current=>current&&snapshot.session_id===current.session.id?{...current,map:applyMapEvent(current.map,snapshot)}:current);
     },
   );
 
@@ -113,6 +119,7 @@ export default function AdminConsole({ onSignOut }: Props) {
     setSessionId(id);
     setError(null);
     setTab("board");
+    setSelectedSubmissionId(null);
   };
 
   const sessionDeleted = (id: string) => {
@@ -176,6 +183,7 @@ export default function AdminConsole({ onSignOut }: Props) {
     { id: "board", label: "Board" },
     { id: "clues", label: "Clues" },
     { id: "progress", label: "Progress" },
+    { id: "map", label: "Map" },
   ];
 
   return (
@@ -210,6 +218,8 @@ export default function AdminConsole({ onSignOut }: Props) {
         {tab === "review" ? (
           <ReviewTab
             submissions={state.submissions}
+            selectedId={selectedSubmissionId}
+            onSelect={setSelectedSubmissionId}
             onApprove={(id, note) =>
               run(() => approveSubmission(id, note), "could not approve")
             }
@@ -222,10 +232,7 @@ export default function AdminConsole({ onSignOut }: Props) {
         {tab === "codes" ? (
           <CodesTab
             teams={state.teams}
-            onRemove={(memberId) => {
-              if (!window.confirm("Remove this player?")) return;
-              void run(() => removeMember(memberId), "could not remove player");
-            }}
+
           />
         ) : null}
 
@@ -250,8 +257,13 @@ export default function AdminConsole({ onSignOut }: Props) {
           />
         ) : null}
 
+        {tab === 'map' ? <HostMap key={session.id} data={state.map} status={session.status} sessionId={session.id} teamNames={Object.fromEntries(state.progress.map(team=>[team.team_id,team.team_name]))} onReload={async()=>setState(await fetchAdminState(session.id))}/> : null}
         {tab === "progress" ? <ProgressTab state={state} /> : null}
       </main>
+      <HostSubmissionNotifications key={session.id} submissions={state.submissions} suppressed={tab === "review"} onOpen={id => {
+        setSelectedSubmissionId(id);
+        setTab("review");
+      }} />
     </div>
   );
 }

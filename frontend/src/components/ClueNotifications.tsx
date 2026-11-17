@@ -19,7 +19,7 @@ export function ClueNotifications({ outcome, announcements, onDismissOutcome, on
 }) {
   useEffect(() => {
     if (!outcome) return;
-    const timer = window.setTimeout(() => onDismissOutcome(outcome.id), outcome.kind === "success" ? 8000 : 12000);
+    const timer = window.setTimeout(() => onDismissOutcome(outcome.id), 8000);
     return () => window.clearTimeout(timer);
   }, [outcome?.id, onDismissOutcome]);
 
@@ -48,7 +48,7 @@ export function ClueNotifications({ outcome, announcements, onDismissOutcome, on
           <div className="rejection-feedback"><strong>HOST FEEDBACK</strong>
             <p>{outcome.submission.review_note?.trim() || "No feedback was provided. Check the challenge requirements before submitting again."}</p>
           </div>
-          <p className="outcome-note">Your team only. This closes automatically after 12 seconds.</p>
+          <p className="outcome-note">Your team only. This closes automatically after 8 seconds.</p>
         </>}
       </RaceDialog>
     </div> : null}

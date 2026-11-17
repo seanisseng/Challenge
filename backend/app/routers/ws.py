@@ -29,6 +29,8 @@ async def websocket_endpoint(
     token: str | None = None,
     admin_token: str | None = None,
     session_id: str | None = None,
+    location_device: str | None = None,
+    location_lease: str | None = None,
 ) -> None:
     settings = get_settings()
     await websocket.accept()
@@ -56,12 +58,17 @@ async def websocket_endpoint(
         if member is None:
             await websocket.close(code=CLOSE_UNAUTHORIZED)
             return
-        initial = await asyncio.to_thread(snapshots.team_payload, member)
+        until=await asyncio.to_thread(repo.location_access_until,member['team']['id'],location_device,location_lease)
+        initial = await asyncio.to_thread(snapshots.team_payload, member,location_until=until)
         sub = Subscriber(
             ws=websocket,
             session_id=member["session"]["id"],
             kind="team",
             member=member,
+            location_device_id=location_device,
+            location_lease=location_lease,
+            location_until=until,
+            tracking_visible=bool((initial.get('map') or {}).get('can_track_teams')),
         )
 
     await hub.register(sub)

@@ -8,9 +8,11 @@ snapshot to the session room.
 from __future__ import annotations
 
 from typing import Any
+import time
 
 from app import repo
 from app.config import get_settings
+from app.game_map import public_map,default_plan
 
 # Deploy-time values that live in challenge copy. `{{phone}}` is replaced from
 # CONTACT_PHONE so the host's number never reaches git or Postgres.
@@ -80,6 +82,7 @@ def _core(
     board: list[dict[str, Any]],
     progress: list[dict[str, Any]],
     awards: list[dict[str, Any]],
+    locations: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return {
         "session": {
@@ -95,16 +98,21 @@ def _core(
         "board": board,
         "progress": progress,
         "clue_awards": awards,
+        "map": public_map(session,locations or []),
+        "_host_map": {"plan":session.get("playing_area") or {'stages':default_plan()['stages']},
+                      "finish":session.get("final_destination") or default_plan()['finish']},
     }
 
 
 def session_core(session_id: str) -> dict[str, Any]:
     """The parts of the snapshot that are identical for every viewer."""
+    session=repo.get_session(session_id)
     return _core(
-        repo.get_session(session_id),
+        session,
         [_render_challenge(c) for c in repo.active_challenges(session_id)],
         repo.progress(session_id),
         repo.recent_clue_awards(session_id),
+        repo.map_locations(session_id) if session.get("playing_area") else [],
     )
 
 
@@ -126,6 +134,7 @@ def room_data(session_id: str) -> dict[str, Any]:
             [_render_challenge(c) for c in repo.active_challenges(session_id)],
             repo.progress(session_id, teams),
             repo.recent_clue_awards(session_id),
+            repo.map_locations(session_id) if session.get("playing_area") else [],
         ),
         "teams": teams,
         "members": repo.members_by_team(team_ids),
@@ -140,6 +149,7 @@ def team_payload(
     member: dict[str, Any],
     core: dict[str, Any] | None = None,
     room: dict[str, Any] | None = None,
+    location_until: float = 0,
 ) -> dict[str, Any]:
     """Full snapshot for one player's device.
 
@@ -159,19 +169,30 @@ def team_payload(
         submissions = repo.team_submissions(team_id)
         clues = repo.team_clues(team_id)
 
+    # Existing sockets cache member identity; team names come from fresh room data.
+    team_name = next((row["team_name"] for row in core["progress"]
+                      if row.get("team_id") == team_id and row.get("team_name")),
+                     member["team"]["name"])
     visible = core["session"].get("board_visible", False) and core["session"]["status"] == "active"
     board = _board_with_my_status(core["board"] if visible else [], submissions)
+    game_map=core.get('map')
+    if game_map is not None:
+        can_track=location_until>time.time() and core['session']['status']=='active'
+        game_map={**game_map,'can_track_teams':can_track,
+                  'locations':[point for point in game_map.get('locations',[]) if can_track or point['team_id']==team_id],
+                  **{key:None for key in ('started_at','next_shrink_at','paused_at') if key in game_map}}
 
     return {
         "kind": "team",
         "session": core["session"],
         "me": {"id": member["id"], "name": member["name"]},
-        "team": {"id": member["team"]["id"], "name": member["team"]["name"]},
+        "team": {"id": member["team"]["id"], "name": team_name},
         "board": board,
         "progress": core["progress"],
         "clues": clues,
         "my_submissions": submissions,
         "clue_awards": core.get("clue_awards", []),
+        "map": game_map,
     }
 
 
@@ -197,6 +218,7 @@ def admin_payload(
 
     return {
         "kind": "admin",
+        "map": {**core.get("map",{}),**core.get("_host_map",{})},
         "session": core["session"],
         "board": core["board"],
         "queue": queue,

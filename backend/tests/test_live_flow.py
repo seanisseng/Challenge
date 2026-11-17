@@ -91,29 +91,30 @@ def test_full_game_flow() -> None:
         team_a, team_b = teams[0], teams[1]
 
         alice = client.post(
-            "/api/join", json={"code": team_a["join_code"], "name": "Alice"}
+            "/api/join", json={"code": team_a["join_code"]}
         )
         assert alice.status_code == 200, alice.text
         alice_token = alice.json()["token"]
 
         bob = client.post(
-            "/api/join", json={"code": team_a["join_code"].lower(), "name": "Bob"}
+            "/api/join", json={"code": team_a["join_code"].lower()}
         )
         assert bob.status_code == 200, "codes are case-insensitive"
         bob_token = bob.json()["token"]
         assert bob.json()["state"]["team"]["id"] == team_a["id"]
 
         cara = client.post(
-            "/api/join", json={"code": team_b["join_code"], "name": "Cara"}
+            "/api/join", json={"code": team_b["join_code"]}
         )
         assert cara.status_code == 200, cara.text
         cara_token = cara.json()["token"]
 
         duplicate = client.post(
-            "/api/join", json={"code": team_a["join_code"], "name": "alice"}
+            "/api/join", json={"code": team_a["join_code"]}
         )
-        assert duplicate.status_code == 400, "names are unique per team"
-        assert "already using the name" in duplicate.json()["detail"]
+        assert duplicate.status_code == 200, "the code restores shared team access"
+        assert duplicate.json()["token"] == alice_token
+        assert bob_token == alice_token
 
         bad = client.post("/api/join", json={"code": "ZZZZZZ", "name": "Nobody"})
         assert bad.status_code == 400
@@ -123,18 +124,11 @@ def test_full_game_flow() -> None:
         cara_headers = {"X-Team-Token": cara_token}
 
         # --- content -------------------------------------------------------
-        clue = client.post(
-            f"/api/admin/sessions/{session_id}/clues",
-            headers=admin,
-            json={
-                "tier": "tier1",
-                "title": "Head north",
-                "body": "Follow the river past the old mill.",
-                "media_url": None,
-                "sort_order": 0,
-            },
-        )
-        assert clue.status_code == 200, clue.text
+        catalog = client.get(f"/api/admin/sessions/{session_id}/clues", headers=admin)
+        assert catalog.status_code == 200, catalog.text
+        tier1_ids = {c["id"] for c in catalog.json() if c["tier"] == "tier1"}
+        assert len(tier1_ids) >= 8
+        assert client.get("/api/state", headers=alice_headers).json()["clues"] == []
 
         challenge = client.post(
             f"/api/admin/sessions/{session_id}/challenges",
@@ -206,7 +200,7 @@ def test_full_game_flow() -> None:
         alice_state = client.get("/api/state", headers=alice_headers).json()
         assert len(alice_state["clues"]) == 1
         assert alice_state["clues"][0]["tier"] == "tier1"
-        assert alice_state["clues"][0]["title"] == "Head north"
+        assert alice_state["clues"][0]["id"] in tier1_ids
         assert challenge_id not in [c["id"] for c in alice_state["board"]]
 
         cara_state = client.get("/api/state", headers=cara_headers).json()
@@ -219,7 +213,7 @@ def test_full_game_flow() -> None:
         # Everyone sees the same scoreboard.
         progress = {p["team_id"]: p for p in cara_state["progress"]}
         assert progress[team_a["id"]]["clue_count"] == 1
-        assert progress[team_a["id"]]["member_count"] == 2
+        assert progress[team_a["id"]]["member_count"] == 1
         assert progress[team_b["id"]]["clue_count"] == 0
 
         # A claimed challenge can no longer be submitted against.

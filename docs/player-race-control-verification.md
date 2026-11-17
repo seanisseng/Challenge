@@ -62,3 +62,26 @@ Using the agent-self-evaluation skill:
 Overall: **4.0/5**. Highest-value follow-ups are user visual review, then a real
 phone camera/upload check and additional browser engines if needed. The user
 should find this assessment consistent with the verified local scope.
+
+
+## Unlocked clue paper slips ? 2026-11-15
+
+The player Your clues inventory now renders one paper slip for each earned clue,
+with warm paper, faint rules, a margin line, folded corner, lightly torn lower
+edge and shadow. Tier labels remain above their groups; locked tiers keep their
+empty-state explanation. Titles, complete body text and optional reference links
+are preserved. Host clue preview and success-modal styling are unchanged.
+
+The existing player-view browser fixture now includes short and long clues in
+all three tiers plus a reference link. Its layout and axe checks passed in desktop
+Chromium, phone Chromium and iPhone WebKit: three passed. `npm run build` and
+`git diff --check` passed. The phone clue screenshot was visually inspected.
+Screenshots: `frontend/artifacts/player-clues-{desktop,phone,iphone-webkit}.png`.
+These are local fixtures; no live game or database records were changed.
+No visual baseline comparison or manual screen-reader audit was performed.
+
+Self-evaluation: accuracy 4/5 (three browser engines/viewports checked; no manual
+screen-reader pass), completeness 5/5 (individual slips retain content and links),
+clarity 5/5 (tier grouping and readable text preserved), actionability 5/5 (visible
+in the running local frontend), conciseness 4/5 (CSS-only paper effects avoid new
+assets, though decorative edge rules are verbose). Overall 4.6/5.

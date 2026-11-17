@@ -197,8 +197,12 @@ The intended distinction is information value as well as puzzle form:
   rules, challenge assignments, API calls, data models, routes and host clue
   controls were unchanged.
 - The intended product direction remains prepopulated clues, rather than
-  host-authored clues. This import populates the current active session only;
-  automatic seeding of future sessions has not been implemented.
+  host-authored clues. Migration `20260101000020_global_clue_catalog.sql`
+  implements a permanent shared `clues` catalog. Games draw directly from it;
+  `team_clues` records unlocks per team. Session deletion preserves the catalog.
+  Applied through Supabase MCP on 2026-11-15 as hosted migration
+  `20261115142016`; read-back confirmed all 24 exact player-facing clues.
+  Wording changes belong in a new migration.
 
 ## Reference checks
 

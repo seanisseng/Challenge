@@ -5,12 +5,12 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile,Request
 
 from app import repo, snapshots
 from app.config import get_settings
 from app.deps import current_member
-from app.models import JoinRequest
+from app.models import JoinRequest, TeamNameRequest
 from app.realtime import hub
 
 router = APIRouter(prefix="/api", tags=["play"])
@@ -20,8 +20,8 @@ ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic"}
 
 @router.post("/join")
 def join(payload: JoinRequest) -> dict[str, Any]:
-    """Redeem a team code plus a player name. No account, no password."""
-    joined = repo.join_team(payload.code, payload.name)
+    """Join or rejoin shared team access using only the team code."""
+    joined = repo.join_team(payload.code)
     token = str(joined["member_token"])
 
     member = repo.member_by_token(token)
@@ -32,10 +32,11 @@ def join(payload: JoinRequest) -> dict[str, Any]:
 
 
 @router.get("/state")
-def state(member: dict[str, Any] = Depends(current_member)) -> dict[str, Any]:
+def state(request:Request,member: dict[str, Any] = Depends(current_member)) -> dict[str, Any]:
     """The full snapshot this device needs to render the game."""
     repo.touch_member(member["id"])
-    return snapshots.team_payload(member)
+    until=repo.location_access_until(member['team']['id'],request.headers.get('X-Location-Device'),request.headers.get('X-Location-Lease'))
+    return snapshots.team_payload(member,location_until=until)
 
 
 @router.post("/submissions")
@@ -87,3 +88,11 @@ async def submit_proof(
 def clues(member: dict[str, Any] = Depends(current_member)) -> list[dict[str, Any]]:
     """Only this team's unlocked clues."""
     return repo.team_clues(member["team"]["id"])
+
+
+@router.patch("/team")
+def rename_team(payload: TeamNameRequest, background: BackgroundTasks,
+                member: dict[str, Any] = Depends(current_member)) -> dict[str, str]:
+    name = repo.rename_team(member["team"]["id"], payload.name)
+    background.add_task(hub.broadcast, member["session"]["id"])
+    return {"name": name}

@@ -1,3 +1,4 @@
+import type { MapPoint,MapStage } from "./gameMap";
 /**
  * Thin fetch wrapper around the FastAPI backend.
  *
@@ -22,6 +23,9 @@ export const API_BASE_URL: string =
 const TEAM_TOKEN_KEY = "challenge.team-token";
 const ADMIN_TOKEN_KEY = "challenge.admin-token";
 const ADMIN_SESSION_KEY = "challenge.admin-session";
+export interface LocationAccess {device_id:string;lease:string}
+let locationAccess:LocationAccess|null=null;
+export function setLocationAccess(access:LocationAccess|null) {locationAccess=access;}
 
 export class ApiError extends Error {
   readonly status: number;
@@ -45,6 +49,7 @@ export function getTeamToken(): string | null {
 }
 
 export function setTeamToken(token: string | null): void {
+  if(!token)locationAccess=null;
   try {
     if (token) localStorage.setItem(TEAM_TOKEN_KEY, token);
     else localStorage.removeItem(TEAM_TOKEN_KEY);
@@ -105,6 +110,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const admin = options.adminToken ?? getAdminToken();
 
   if (token) headers["X-Team-Token"] = token;
+  if(token&&locationAccess){headers['X-Location-Device']=locationAccess.device_id;headers['X-Location-Lease']=locationAccess.lease;}
   if (admin) headers["X-Admin-Token"] = admin;
 
   let body: BodyInit | undefined;
@@ -136,6 +142,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     try {
       const payload = (await response.json()) as { detail?: unknown };
       if (typeof payload.detail === "string") detail = payload.detail;
+      else if (Array.isArray(payload.detail)) detail=payload.detail.map(item=>item && typeof item==='object' && 'msg' in item ? String(item.msg).replace(/^Value error, /,'') : '').filter(Boolean).slice(0,2).join('. ') || detail;
+      else if (Array.isArray(payload.detail)) detail = payload.detail.map(item => typeof item?.msg === "string" ? item.msg.replace(/^Value error, /, "") : "").filter(Boolean).slice(0, 2).join(". ") || detail;
     } catch {
       /* non-JSON error body */
     }
@@ -149,10 +157,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 // --------------------------------------------------------------------------
 // player
 // --------------------------------------------------------------------------
-export async function joinTeam(code: string, name: string): Promise<TeamState> {
+export async function joinTeam(code: string): Promise<TeamState> {
   const result = await request<{ token: string; state: TeamState }>("/api/join", {
     method: "POST",
-    body: { code: code.trim(), name: name.trim() },
+    body: { code: code.trim() },
     teamToken: null,
     adminToken: null,
   });
@@ -307,22 +315,6 @@ export function uploadChallengeImage(
   });
 }
 
-export function addClue(
-  sessionId: string,
-  input: {
-    tier: Tier;
-    title: string;
-    body: string;
-    media_url: string | null;
-    sort_order: number;
-  },
-): Promise<unknown> {
-  return request(`/api/admin/sessions/${sessionId}/clues`, {
-    method: "POST",
-    body: input,
-  });
-}
-
 export function listClues(sessionId: string): Promise<Clue[]> {
   return request<Clue[]>(`/api/admin/sessions/${sessionId}/clues`);
 }
@@ -336,9 +328,9 @@ export function removeMember(memberId: string): Promise<{ ok: boolean }> {
 // --------------------------------------------------------------------------
 // websocket
 // --------------------------------------------------------------------------
-export function teamSocketUrl(token: string): string {
+export function teamSocketUrl(token: string,access?:LocationAccess|null): string {
   const base = API_BASE_URL.replace(/^http/, "ws");
-  return `${base}/ws?token=${encodeURIComponent(token)}`;
+  return `${base}/ws?token=${encodeURIComponent(token)}`+(access?`&location_device=${encodeURIComponent(access.device_id)}&location_lease=${encodeURIComponent(access.lease)}`:'');
 }
 
 export function adminSocketUrl(token: string, sessionId: string): string {
@@ -347,3 +339,20 @@ export function adminSocketUrl(token: string, sessionId: string): string {
     token,
   )}&session_id=${encodeURIComponent(sessionId)}`;
 }
+
+
+export function renameTeam(name: string): Promise<{ name: string }> {
+  return request("/api/team", { method: "PATCH", body: { name: name.trim() } });
+}
+
+
+export function configureMap(sessionId:string,plan:{finish:MapPoint;stages:MapStage[]}) {return request(`/api/admin/sessions/${sessionId}/map`,{method:'PUT',body:plan});}
+export function startMapTimer(sessionId:string) {return request(`/api/admin/sessions/${sessionId}/map/start`,{method:'POST'});}
+export function pauseMapTimer(sessionId:string) {return request(`/api/admin/sessions/${sessionId}/map/pause`,{method:'POST'});}
+export function resumeMapTimer(sessionId:string) {return request(`/api/admin/sessions/${sessionId}/map/resume`,{method:'POST'});}
+export function seekMapTimer(sessionId:string,elapsed_seconds:number) {return request(`/api/admin/sessions/${sessionId}/map/seek`,{method:'POST',body:{elapsed_seconds}});}
+export function resetMapTimer(sessionId:string) {return request(`/api/admin/sessions/${sessionId}/map/reset`,{method:'POST'});}
+export function shrinkMapArea(sessionId:string) {return request(`/api/admin/sessions/${sessionId}/map/shrink`,{method:'POST'});}
+export function beginLocationShare(device_id:string):Promise<{lease:string;revision:number}> {return request('/api/location/start',{method:'POST',body:{device_id}});}
+export function sendLocation(device_id:string,lease:string,point:MapPoint,accuracy_m:number) {return request('/api/location',{method:'PUT',body:{device_id,lease,...point,accuracy_m}});}
+export function endLocationShare(device_id:string,lease:string) {return request('/api/location',{method:'DELETE',body:{device_id,lease}});}

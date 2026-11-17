@@ -280,8 +280,8 @@ def touch_member(member_id: str) -> None:
         pass  # presence is cosmetic; never fail a request over it
 
 
-def join_team(code: str, name: str) -> dict[str, Any]:
-    rows = rpc("join_team", {"p_join_code": code, "p_member_name": name})
+def join_team(code: str, name: str | None = None) -> dict[str, Any]:
+    rows = rpc("join_team", {"p_join_code": code})
     if not rows:
         raise HTTPException(status_code=400, detail="could not join team")
     return rows[0]
@@ -498,7 +498,7 @@ def progress(session_id: str, teams: list[dict[str, Any]] | None = None) -> list
         _select("team_members").select("team_id").in_("team_id", team_ids).execute().data
     )
     clues = (
-        _select("team_clues").select("team_id").in_("team_id", team_ids).execute().data
+        _select("team_clues").select("team_id,clues!inner(tier)").in_("team_id", team_ids).execute().data
     )
     claimed = (
         _select("challenges")
@@ -519,6 +519,9 @@ def progress(session_id: str, teams: list[dict[str, Any]] | None = None) -> list
 
     member_count = tally(members, "team_id")
     clue_count = tally(clues, "team_id")
+    tier_counts = {team_id: {tier: 0 for tier in TIER_ORDER} for team_id in team_ids}
+    for clue in clues:
+        tier_counts[clue["team_id"]][clue["clues"]["tier"]] += 1
     claim_count = tally(claimed, "claimed_by_team_id")
 
     return [
@@ -527,6 +530,7 @@ def progress(session_id: str, teams: list[dict[str, Any]] | None = None) -> list
             "team_name": team["name"],
             "member_count": member_count.get(team["id"], 0),
             "clue_count": clue_count.get(team["id"], 0),
+            "clue_tier_counts": tier_counts[team["id"]],
             "claimed_count": claim_count.get(team["id"], 0),
         }
         for team in teams
@@ -635,40 +639,10 @@ def set_challenge_image(challenge_id: str, path: str) -> None:
         raise _to_http(exc) from exc
 
 
-def create_clue(
-    session_id: str,
-    tier: str,
-    title: str,
-    body: str,
-    media_url: str | None,
-    sort_order: int,
-) -> dict[str, Any]:
-    try:
-        rows = (
-            _select("clues")
-            .insert(
-                {
-                    "session_id": session_id,
-                    "tier": tier,
-                    "title": title,
-                    "body": body,
-                    "media_url": media_url,
-                    "sort_order": sort_order,
-                }
-            )
-            .execute()
-            .data
-        )
-    except APIError as exc:
-        raise _to_http(exc) from exc
-    return rows[0]
-
-
-def list_clues(session_id: str) -> list[dict[str, Any]]:
+def list_clues() -> list[dict[str, Any]]:
     return (
         _select("clues")
         .select("id,tier,title,body,media_url,sort_order")
-        .eq("session_id", session_id)
         .order("tier")
         .order("sort_order")
         .execute()
@@ -777,3 +751,65 @@ def signed_url(path: str, expires_in: int = 3600) -> str | None:
     if isinstance(res, dict):
         return res.get("signedURL") or res.get("signedUrl")
     return None
+
+
+def rename_team(team_id: str, name: str) -> str:
+    return rpc("rename_team", {"p_team_id": team_id, "p_name": name})
+
+
+def map_locations(session_id: str) -> list[dict[str, Any]]:
+    since=(datetime.now(timezone.utc).timestamp()-120)
+    rows=(_select("map_location_shares").select("team_id,device_id,lat,lng,accuracy_m,updated_at,revision,teams!inner(name)")
+          .eq("session_id",session_id).gte("updated_at",datetime.fromtimestamp(since,timezone.utc).isoformat()).execute().data)
+    return [{**{k:v for k,v in row.items() if k!="teams"},"team_name":row["teams"]["name"]} for row in rows]
+
+
+def configure_map(session_id: str, plan: dict) -> None:
+    rpc("configure_playing_area",{"p_session_id":session_id,"p_plan":plan})
+
+
+def location_access_until(team_id: str, device_id: str | None, lease: str | None) -> float:
+    """Private device proof: another teammate's shared fix does not grant access."""
+    if not device_id or not lease:return 0
+    try:uuid.UUID(device_id);uuid.UUID(lease)
+    except (ValueError,TypeError,AttributeError):return 0
+    rows=(_select('map_location_shares').select('updated_at,lat').eq('team_id',team_id)
+          .eq('device_id',device_id).eq('lease',lease).limit(1).execute().data)
+    if not rows or rows[0].get('lat') is None or not rows[0].get('updated_at'):return 0
+    return datetime.fromisoformat(rows[0]['updated_at'].replace('Z','+00:00')).timestamp()+120
+
+
+def set_map_timer(session_id: str, start: bool) -> None:
+    rpc("set_map_timer",{"p_session_id":session_id,"p_start":start})
+
+
+def seek_map_timer(session_id: str, elapsed_seconds: int) -> None:
+    rpc("seek_map_timer",{"p_session_id":session_id,"p_elapsed_seconds":elapsed_seconds})
+
+
+def pause_map_timer(session_id: str, pause: bool) -> None:
+    rpc('pause_map_timer',{'p_session_id':session_id,'p_pause':pause})
+
+
+def shrink_map(session_id: str) -> int:
+    return rpc("shrink_map_area",{"p_session_id":session_id})
+
+
+def start_location(team_id: str, device_id: str) -> dict:
+    return rpc("start_location_share",{"p_team_id":team_id,"p_device_id":device_id})
+
+
+def update_location(team_id: str, data: dict) -> dict:
+    return rpc("update_map_location",{"p_team_id":team_id,**{"p_"+key:value for key,value in data.items()}})
+
+
+def stop_location(team_id: str, device_id: str, lease: str) -> dict | None:
+    return rpc("stop_location_share",{"p_team_id":team_id,"p_device_id":device_id,"p_lease":lease})
+
+
+def expire_locations() -> list[dict]:
+    return rpc("expire_map_locations",{}) or []
+
+
+def running_maps() -> list[dict]:
+    return (_select("game_sessions").select("id").eq("status","active").not_.is_("map_started_at","null").execute().data)

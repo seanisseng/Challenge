@@ -16,12 +16,15 @@ const MAX_BACKOFF_MS = 10_000;
 export function useLiveSocket<T>(
   url: string | null,
   onSnapshot: (snapshot: T) => void,
+  onUnauthorized?: () => void,
 ): ConnectionStatus {
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
 
   // Keep the callback in a ref so a new closure never forces a reconnect.
   const handler = useRef(onSnapshot);
   handler.current = onSnapshot;
+  const unauthorized = useRef(onUnauthorized);
+  unauthorized.current = onUnauthorized;
 
   useEffect(() => {
     if (!url) {
@@ -68,10 +71,15 @@ export function useLiveSocket<T>(
         /* onclose follows and handles the retry */
       };
 
-      socket.onclose = () => {
+      socket.onclose = event => {
         clearTimers();
         if (disposed) return;
         setStatus("offline");
+        if (event.code === 4401) {
+          disposed = true;
+          unauthorized.current?.();
+          return;
+        }
         attempt += 1;
         const delay = Math.min(1000 * 2 ** (attempt - 1), MAX_BACKOFF_MS);
         retry = window.setTimeout(open, delay);

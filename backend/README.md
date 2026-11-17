@@ -50,7 +50,10 @@ deprecating the legacy `service_role` JWT by the end of 2026, so the
 No anon/publishable key is needed anywhere: the frontend never talks to
 Supabase, and RLS has no policies for it to read.
 
-All migrations are already applied. Verify the live state any time with:
+Migration 20 was applied through Supabase MCP on 2026-11-15 as hosted version
+`20261115142016` (`global_clue_catalog`); all 24 shared clues were verified.
+Migrations 21/22 were applied on 2026-11-16 as hosted versions
+`20261116054423` and `20261116055049`. Verify the live migration state with:
 
 ```sql
 select * from supabase_migrations.schema_migrations order by version;
@@ -71,9 +74,12 @@ There are no user accounts anywhere - not in Supabase Auth, not in a table.
   table to clean up.
 - **A team code is a shared credential.** The host picks the team count when
   creating a session; the database generates one unique 6-character code per
-  team. Every teammate types the same code, then their own name, and gets their
-  own `team_members` row with its own token. Names are unique per team,
-  case-insensitively.
+  team. Every teammate enters only that code and receives the same shared team
+  token. Rejoining preserves team clues, submissions and progress. One internal
+  `team_members` access row is reused per team; legacy records/tokens remain valid.
+- **Any teammate may rename their team.** `PATCH /api/team` derives the team
+  from its token. Names are trimmed, limited to 40 characters and unique within
+  the game regardless of case. The team code and credential do not change.
 - **RLS stays on with zero policies.** Anon and authenticated have no table
   grants at all, so a leaked anon key reads nothing. Every query runs through
   the backend's service-role client.
@@ -85,7 +91,6 @@ game_sessions 1---* teams 1---* team_members
                  |     |
                  |     +---* team_clues *---1 clues
                  |     +---* submissions
-                 +---* clues
                  +---* challenges *---1 submissions
 submission_events *---1 submissions
 ```
@@ -96,8 +101,8 @@ submission_events *---1 submissions
 |-------|---------|-----------------|
 | `game_sessions` | Game room + lifecycle | `room_code` unique, `status`, `team_count`, `active_task_limit`, `final_destination` |
 | `teams` | One team slot per session | unique `(session_id, name)`, unique `join_code` |
-| `team_members` | A person who joined a team | `name`, unique `(team_id, lower(name))`, unique `token` |
-| `clues` | Clue content per tier | `tier` (`tier1/2/3`), `body`, `media_url` |
+| `team_members` | Internal shared access identity; legacy records retained | `name`, unique `(team_id, lower(name))`, unique `token` |
+| `clues` | Permanent shared catalog, independent of sessions | `tier` (`tier1/2/3`), `body`, `media_url` |
 | `challenges` | Pool + live board | `clue_tier`, `clue_id`, `status`, `is_active`, `claimed_by_team_id` |
 | `submissions` | Photo proof + review | `photo_path`, `status`, `team_member_id`, `reviewed_by` |
 | `team_clues` | Unlocked clue inventory | unique `(team_id, clue_id)` |
@@ -123,12 +128,13 @@ submission_events *---1 submissions
   the winner, claims the challenge, grants the matching tier clue, auto-rejects
   rival pending submissions, and refills the board.
 - **Clue rewards.** For every approved challenge, `approve_submission` filters
-  the session's clues to the rewarded tier, excludes clues the winning team
+  the shared clue catalog to the rewarded tier, excludes clues the winning team
   already owns, and randomly grants one remaining clue. `challenges.clue_id`
   does not override the draw. Teams can collect multiple clues per tier;
   another team's inventory does not affect eligibility. If the team has
   exhausted the tier, approval succeeds without repeating an owned clue.
-  This behavior requires migration `20260101000019` on the hosted database.
+  The shared catalog requires migration `20260101000020` on the hosted database.
+  A missing tier aborts approval; an exhausted tier still succeeds without a duplicate.
 
 ## RPC reference
 
@@ -138,7 +144,8 @@ All are `SECURITY DEFINER` and executable only by `service_role`.
 |-----|--------|
 | `generate_join_code()` | 6 chars from a 32-char alphabet with no `0/O/1/I/L` |
 | `create_session(name, team_count, task_limit?, room_code?)` | Creates team slots and a hidden, prepopulated challenge board |
-| `join_team(join_code, member_name)` | Redeems a code + name, returns that device's member token |
+| `join_team(join_code, member_name?)` | Returns shared team access; legacy name argument is ignored |
+| `rename_team(team_id, name)` | Renames the authenticated team without changing access or progress |
 | `submit_proof(team_id, member_id, challenge_id, photo_path, photo_url?)` | Creates a pending submission |
 | `approve_submission(submission_id, note?)` | Claims the challenge, grants the clue, rejects rivals, refills |
 | `reject_submission(submission_id, note?)` | Rejects; reopens the board if it was the last pending |
@@ -167,12 +174,13 @@ Team endpoints take `X-Team-Token`; admin endpoints take `X-Admin-Token`
 | `POST` | `/api/admin/sessions/{id}/challenges/{challenge_id}/defer` | admin | Legacy alias for removal |
 | `POST` | `/api/admin/sessions/{id}/end` | admin | End the game |
 | `POST` | `/api/admin/sessions/{id}/challenges` | admin | Add a challenge (goes live if there is room) |
-| `GET`/`POST` | `/api/admin/sessions/{id}/clues` | admin | List / add clues |
+| `GET` | `/api/admin/sessions/{id}/clues` | admin | Read the shared catalog after validating the session |
 | `POST` | `/api/admin/submissions/{id}/approve` | admin | Approve a proof |
 | `POST` | `/api/admin/submissions/{id}/reject` | admin | Reject a proof |
 | `GET` | `/api/admin/submissions/{id}/photo` | admin | Short-lived signed photo URL |
 | `DELETE` | `/api/admin/members/{id}` | admin | Remove a player |
-| `POST` | `/api/join` | none | Redeem a team code + name, returns a token |
+| `POST` | `/api/join` | none | Join or rejoin using a team code, returns shared access |
+| `PATCH` | `/api/team` | team | Change own team name and broadcast the update |
 | `GET` | `/api/state` | team | Full player snapshot |
 | `POST` | `/api/submissions` | team | Upload photo proof (multipart) |
 | `GET` | `/api/clues` | team | Only this team's unlocked clues |
@@ -258,7 +266,7 @@ a new migration to update `challenge_templates` for future sessions.
    or with `psql` against the hosted database.
 2. Apply `supabase/seed_challenges.sql`. It locks room `95Q2X3`, inserts the 29
    canonical challenges only if the pool is empty, and leaves them inactive.
-   It does not create clues; add the real clues in the admin console before play.
+   Apply migration 20 to populate the permanent clue catalog before play.
 3. With a working service key in `backend/.env`, run from `backend/`:
 
    ```powershell
@@ -297,6 +305,9 @@ Timestamp-prefixed SQL in `supabase/migrations/`:
 | `*_0017_queue_conflict_response` | explicit HTTP conflict response for stale queue saves |
 | `*_0018_approval_lock_order_and_clue_rotation` | one lock order for approve/reject/discard, clue fallback skips clues the team owns |
 | `*_0019_random_unowned_clue_rewards` | every approved challenge randomly awards one same-tier clue the winning team does not own |
+| `*_0020_global_clue_catalog` | shared permanent clues, preserved legacy unlocks, random global tier rewards |
+| `*_0021_team_pool_access` | code-only joins reuse one shared team identity, preserving legacy access |
+| `*_0022_team_names` | team-controlled names, case-insensitive room uniqueness |
 
 `*_0018` is applied on the hosted project. It removes the `40P01` deadlock
 between concurrent approvals and makes repeat wins of a clue tier rotate to the
@@ -344,3 +355,25 @@ Optional and **not** applied to the hosted project. It calls `create_session`
 for a 3-team "Sunset City Hunt", adds two clues per tier and eight challenges,
 and prints the generated team codes. There are no auth users to create any
 more - hand the printed codes out and play.
+
+
+## Playing area and location sharing
+
+Migration 23 adds private map configuration and expiring device fixes. It was
+applied to hosted Supabase as `20261116071533` on 2026-11-16. New games persist
+the default 7/5/3 km zones and hidden finish; existing games are not backfilled.
+Shrink times are blank for manual control until the host sets them. Shrink area
+advances one stage immediately and preserves future scheduled deadlines. The host saves a hidden destination and nested
+circular stages, then starts the shrink countdown during an active game. Each
+stage must contain the destination and fit inside the previous stage. Timers
+use absolute server time and restore after restart. Current deployment uses
+one backend process with the existing in-memory WebSocket room hub.
+
+Players opt in per browser using Share my location. All teams and the host see
+shared device positions under team names. Only the latest fix is kept; clients
+hide fixes after two minutes and the backend clears expired coordinates every
+30 seconds. Ending a game deletes shares. Devices need HTTPS and browser
+location permission; visible-tab updates do not provide background tracking.
+No Google API key is required. OSM standard tiles require attribution and
+compliance with their best-effort public tile policy. Details and verification:
+[playing-area-verification](../docs/playing-area-verification.md).

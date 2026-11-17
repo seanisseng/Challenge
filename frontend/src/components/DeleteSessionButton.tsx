@@ -31,7 +31,7 @@ export function DeleteSessionButton({ session, onDeleted, compact = false }: {
   };
   return <>
     <button type="button" className={compact ? "btn-danger m-3 shrink-0" : "header-end-game"}
-      aria-label={compact ? `Delete ${session.name}` : "Delete session"}
+      aria-label={compact ? `Delete session ${session.name}` : "Delete session"}
       onClick={() => { setError(null); setOpen(true); }}>
       <Trash2 size={15} aria-hidden="true" />Delete session
     </button>

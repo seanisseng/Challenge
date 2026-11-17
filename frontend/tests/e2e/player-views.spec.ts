@@ -47,7 +47,10 @@ test("new clues celebrate once, close early or expire, and survive a closing pro
   fixture.state.clues.push({ ...fixture.state.clues[1], id: "next-clue", title: "Another clue" });
   fixture.push();
   await expect(modal).toBeVisible();
-  await page.clock.fastForward(8100);
+  await expect(modal).toContainText("closes automatically after 8 seconds");
+  await page.clock.runFor(7900);
+  await expect(modal).toBeVisible();
+  await page.clock.runFor(200);
   await expect(modal).toHaveCount(0);
 });
 
@@ -102,7 +105,10 @@ test("rejections privately highlight host feedback and close early or automatica
   fixture.push();
   await expect(modal).toBeVisible();
   await expect(modal.locator(".rejection-feedback")).toContainText("No feedback was provided");
-  await page.clock.fastForward(12100);
+  await expect(modal).toContainText("closes automatically after 8 seconds");
+  await page.clock.runFor(7900);
+  await expect(modal).toBeVisible();
+  await page.clock.runFor(200);
   await expect(modal).toHaveCount(0);
 });
 
@@ -218,7 +224,11 @@ for (const size of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
 }
 
 test("player views use readable tickets, clue badges and accessible race progress", async ({ page }, info) => {
-  await playerFixture(page);
+  const fixture = await playerFixture(page);
+  fixture.state.clues.push(
+    { id: "paper-tier2", tier: "tier2", title: "The Morning Tenant", body: "Borrow the sunrise's address. Leave the sunset to somebody else.", media_url: null, unlocked_at: "2026-11-15" },
+    { id: "paper-tier3", tier: "tier3", title: "Five Answers, One Stop", body: "Calculate separately: 3 squared; 1+1; 6 divided by 3; 10 divided by 2; 4 minus 3. Join the five answers in order. Look up that Singapore bus-stop code: its name identifies the area opposite the finish. You do not need to board a bus.", media_url: "https://example.com/reference", unlocked_at: "2026-11-15" },
+  );
   await page.goto("/");
   await expect(page.getByRole("button", { name: /Going Bananas/ })).toBeEnabled();
   await expect(page.getByText("DRAW PILE", { exact: true })).toHaveCount(0);
@@ -355,7 +365,7 @@ test("session selection uses Race Control and retains its form and navigation", 
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: `artifacts/sessions-${info.project.name}.png`, fullPage: true });
-  await page.getByRole("button", { name: /Game 2/ }).click();
+  await page.getByRole("button", { name: /^Game 2/ }).click();
   await expect(page.getByRole("heading", { name: "Game 2", exact: true })).toBeVisible();
 });
 

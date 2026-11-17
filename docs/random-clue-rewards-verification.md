@@ -1,5 +1,10 @@
 # Random clue rewards verification
 
+**Migration 20 supersedes session-scoped draws with a permanent shared catalog.**
+See [global clue catalog verification](global-clue-catalog-verification.md) for
+current implementation and local integration evidence. The migration-19 notes
+below record the earlier implementation.
+
 Each approved new challenge awards one random clue in the rewarded tier that
 the winning team does not own. Rewards are shared by the team, including all
 its members. A challenge's old clue binding does not override this selection.

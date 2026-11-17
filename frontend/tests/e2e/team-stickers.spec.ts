@@ -3,7 +3,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { fixtureState, installBoardFixture } from "./board.fixture";
 import type { TeamState } from "../../src/lib/types";
 
-async function playerProgress(page: Page, mixed: boolean) {
+async function playerProgress(page: Page, mixed: boolean, inventory = false) {
   const host = fixtureState();
   const distributions = mixed ? [[2, 1, 0], [0, 0, 7], [1, 1, 0], [0, 1, 0], [1, 0, 0], [0, 0, 0]] : Array.from({ length: 6 }, () => [0, 0, 0]);
   const awards = distributions.flatMap((counts, i) => counts.flatMap((count, tier) => Array.from({ length: count }, (_, n) => ({
@@ -11,15 +11,16 @@ async function playerProgress(page: Page, mixed: boolean) {
   }))));
   const state: TeamState = {
     kind: "team", session: host.session, team: { id: "team-0", name: "Team 1" }, me: { id: "member-1", name: "Avery" },
-    board: host.board, my_submissions: [], clue_awards: awards,
+    board: host.board, my_submissions: [], clue_awards: inventory ? [] : awards,
     clues: awards.filter(award => award.team_id === "team-0").map(award => ({ id: award.id, tier: award.tier, title: "Fixture clue", body: "Private fixture copy", media_url: null, unlocked_at: award.awarded_at })),
-    progress: host.progress.map((row, i) => ({ ...row, member_count: 3 + i % 3, clue_count: distributions[i].reduce((a, b) => a + b, 0) })),
+    progress: host.progress.map((row, i) => ({ ...row, member_count: 3 + i % 3, ...(inventory ? { clue_tier_counts: { tier1: distributions[i][0], tier2: distributions[i][1], tier3: distributions[i][2] } } : {}), clue_count: distributions[i].reduce((a, b) => a + b, 0) })),
   };
   await page.addInitScript(() => localStorage.setItem("challenge.team-token", "local-sticker-fixture"));
   await page.route(/\/api\//, route => route.fulfill({ json: state }));
   await page.routeWebSocket(/\/ws\?/, ws => ws.send(JSON.stringify(state)));
   await page.goto("/");
-  await page.getByRole("button", { name: "Teams", exact: true }).click();
+  const teamsTab = page.getByRole("button", { name: "Teams", exact: true });
+  if (await teamsTab.isVisible()) await teamsTab.click();
   await expect(page.locator(".team-sticker-card")).toHaveCount(6);
   await page.evaluate(() => document.fonts.ready);
 }
@@ -121,4 +122,31 @@ test("host never labels a tied lead", async ({ page }) => {
   await page.getByRole("button", { name: /^Progress/ }).first().click();
   await expect(page.locator(".team-sticker-card")).toHaveCount(6);
   await expect(page.locator(".team-label-sticker--leading")).toHaveCount(0);
+});
+
+
+test("host tier breakdown comes from inventory after claimed cards leave the board", async ({ page }) => {
+  const fixture = await installBoardFixture(page);
+  fixture.state.progress = fixture.state.progress.map((row, i) => ({ ...row,
+    clue_count: i === 0 ? 4 : 0,
+    clue_tier_counts: { tier1: 0, tier2: i === 0 ? 2 : 0, tier3: i === 0 ? 2 : 0 },
+  }));
+  // No claimed challenge remains in the live board or queue.
+  await page.goto("/admin");
+  await page.getByRole("button", { name: /^Progress/ }).click();
+  const team = page.locator(".team-sticker-card").filter({ hasText: "Team 1" });
+  await expect(team.getByRole("img", { name: "Tier 2 sticker, 2 earned", exact: true })).toBeVisible();
+  await expect(team.getByRole("img", { name: "Tier 3 sticker, 2 earned", exact: true })).toBeVisible();
+  await expect(page.getByText("Full tier breakdown unavailable", { exact: true })).toHaveCount(0);
+  fixture.state.progress[0].clue_tier_counts!.tier1 = 1;
+  fixture.state.progress[0].clue_count = 5;
+  fixture.push();
+  await expect(team.getByRole("img", { name: "Tier 1 sticker, 1 earned", exact: true })).toBeVisible();
+});
+
+test("player rival tier counts remain complete without the recent award feed", async ({ page }) => {
+  await playerProgress(page, true, true);
+  const rival = page.locator(".team-sticker-card").filter({ hasText: "Team 2" });
+  await expect(rival.getByRole("img", { name: "Tier 3 sticker, 7 earned", exact: true })).toBeVisible();
+  await expect(page.getByText("Full tier breakdown unavailable", { exact: true })).toHaveCount(0);
 });

@@ -15,7 +15,6 @@ from app.models import (
     AdminLoginRequest,
     AdminLoginResponse,
     ChallengeCreateRequest,
-    ClueCreateRequest,
     ReviewRequest,
     ReorderQueueRequest,
     SessionCreateRequest,
@@ -176,26 +175,10 @@ async def upload_challenge_image(
     return {"ok": True, "image_url": repo.public_asset_url(path)}
 
 
-@router.post("/sessions/{session_id}/clues")
-def add_clue(
-    session_id: str, payload: ClueCreateRequest, background: BackgroundTasks
-) -> dict[str, Any]:
-    repo.get_session(session_id)
-    clue = repo.create_clue(
-        session_id,
-        payload.tier,
-        payload.title,
-        payload.body,
-        payload.media_url,
-        payload.sort_order,
-    )
-    background.add_task(hub.broadcast, session_id)
-    return clue
-
-
 @router.get("/sessions/{session_id}/clues")
 def list_clues(session_id: str) -> list[dict[str, Any]]:
-    return repo.list_clues(session_id)
+    repo.get_session(session_id)
+    return repo.list_clues()
 
 
 # --------------------------------------------------------------------------- #

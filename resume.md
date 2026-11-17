@@ -1,6 +1,115 @@
 # Scavenger Hunt App — Handoff
 
-Updated 2026-11-12
+Updated 2026-11-16
+
+## Current task - playing area map
+
+- User chose OpenStreetMap, all teams + host seeing every opted-in device,
+  and host-configured automatic timed shrinking with a hidden destination.
+- Applied map migration 23 `playing_area` through Supabase MCP after explicit
+  user approval; hosted version `20261116071533`. No hosted migration remains
+  pending. No temporary live game created; existing game remains unconfigured.
+- Every new game persists default 7/5/3 km circles. Start center:
+  1.3108674745426903, 103.86352181175857. Hidden finish:
+  1.2993920420142073, 103.90664926387365. Later centers shift 35% / 70% toward
+  the finish, retaining nested containment while letting the start leave the
+  final zone. Exact centers are in the verification doc and migration.
+- Shrink times default null (manual only). Host can set minutes from countdown
+  start, save, then start. Shrink area advances one stage immediately before or
+  after countdown start. Persisted map_stage_floor plus elapsed clock prevent
+  repeating timed stages, survive restart, preserve remaining deadlines. Reset
+  clears floor/clock. Unsaved edits disable start/shrink until saved.
+- Player snapshots expose only starting/current circles and next deadline;
+  finish and future geometry stay host-only. Default finish is supplied by the
+  backend, not hardcoded into the frontend bundle.
+- Every device explicitly opts in; 15-second visible-tab fixes, stop anytime,
+  two-minute stale marker expiry, no location history. Rotating private leases
+  and revision tombstones prevent late updates from resurrecting stopped shares.
+  All views group devices under team names. HTTPS required on actual phones;
+  background/locked-phone GPS is not guaranteed.
+- Local verification: backend 119 passed / 3 hosted skipped + final SQL map suite 6 passed, frontend 19 unit
+  checks, production build, 12 map browser checks across desktop/tablet/phone/
+  iPhone WebKit. Host/player regressions: 47 passed, 5 viewport skips; fixed two existing
+  session-picker accessibility/selector failures and reran both plus four
+  delete-session checks (6 passed). TypeScript and diff checks pass. See
+  `docs/playing-area-verification.md` for privacy, sources, evidence and limits.
+- No commit, push or deployment performed.
+
+## Previous handoff - shared team access and naming
+
+- Latest identity model: **team-only access**. Players enter only the team code;
+  repeat joins return the same shared team credential and all existing clues,
+  submissions and progress. Personal names, recovery links, individual roster
+  controls and misleading player-count displays are removed from the UI.
+  Historical records and existing device credentials are preserved. The discarded
+  individual-recovery feature was never applied to Supabase.
+- Temporary startup/network failures now preserve saved access and offer Retry;
+  only an explicitly invalid credential clears it. Closing/reopening the browser
+  restores saved access; if local storage is lost, re-enter the team code.
+- **Game menu > Change team name** is available to any joined teammate. Names
+  are limited to 40 characters and unique within the game regardless of case.
+  Changes broadcast to teammates and host; cached WebSocket identities use fresh
+  team names. Team code, shared identity, earned clues and progress stay intact.
+- Applied through Supabase MCP on 2026-11-16: local migration 21
+  `team_pool_access` as hosted `20261116054423`, and migration 22 `team_names`
+  as hosted `20261116055049`. Map migration 23 is now also applied (see current task above).
+- Live verification used an explicitly approved scratch game: repeated code-only
+  joins, two teammate sockets plus the host socket, authorized renaming, rejected
+  duplicate names and an earned clue surviving rejoin/rename all passed. Scratch
+  game was deleted; the original active game, six historical access records,
+  four earned clues and 24 permanent clues were unchanged. See
+  `docs/team-access-verification.md` for tests and limits.
+- The user's latest database direction is one permanent shared `clues` catalog.
+  Migration `backend/supabase/migrations/20260101000020_global_clue_catalog.sql`
+  was applied through Supabase MCP to project `ceqfgjqwvuqhtsbmxfdn` as hosted
+  version `20261115142016` (`global_clue_catalog`). All 24 player-facing clues
+  match `clues/clues.md`, eight per tier. `clues.session_id` is removed;
+  there is no `clue_templates` table or per-session seeding.
+- Every game draws randomly from the shared rewarded tier, excluding that
+  team's existing clues. Deleting a game preserves the catalog. Two hosted
+  scratch games verified create/reveal/submit/approve and actual backend player
+  snapshots changing from 0 to 1 matching-tier clue. Scratch games were cleaned
+  up and the original active game preserved. See
+  `docs/global-clue-catalog-verification.md`.
+- Player success modals now close after **8 seconds**; rejection modals after
+  **8 seconds**. Early dismissal remains available. Rival-team notices are
+  unchanged; the user explicitly said no extra rival-notification check was needed.
+- Added the Race Control favicon: existing navy takeoff mark on orange.
+  Assets in `frontend/public/` include SVG, 16/32px ICO, 32px PNG and 180px Apple
+  touch icon; `frontend/index.html` links them. Production build includes all.
+- Fixed host Progress showing "Full tier breakdown unavailable" while players
+  could see earned tiers. `repo.progress` now includes authoritative
+  `clue_tier_counts` from `team_clues -> clues(tier)` for every team. Both views
+  prefer this field over board/history inference; it uses no additional query.
+  Read-only checks against the running host API matched all current inventories:
+  Team 4 has Tier 1: 1, Tier 2: 2, Tier 3: 1 (four clues total).
+  Backend regressions, eight desktop/phone browser cases and the frontend build
+  pass. See `docs/progress-tier-counts-verification.md`.
+- Players' unlocked clues now appear as individual paper slips in Your clues:
+  warm ruled paper, folded corner, lightly torn bottom edge and soft shadow.
+  Tier groupings, private clue wording and reference links are preserved.
+  The existing player-view checks pass on desktop, phone and iPhone WebKit;
+  production build passes. See `docs/player-race-control-verification.md`.
+- Hosts now receive a small, nonblocking notification for new pending submissions.
+  **Open submission** switches to Review, selects that exact proof and focuses
+  its workspace. Notices queue until opened/dismissed, disappear for reviewed
+  proofs, and do not replay existing submissions on initial connection or repeats.
+  Notifications are suppressed on Review; entering Review clears queued notices,
+  and submissions arriving there are marked seen so they do not replay on leaving.
+- The updated local backend was started on `http://127.0.0.1:8000` and verified
+  through actual read-only HTTP requests: healthy, 24 catalog clues, and the old
+  session-specific clue-creation route absent. The frontend was started on
+  `http://127.0.0.1:5173`. Confirm these processes still run when resuming.
+- Browser QA uses local fixtures so notification checks do not mutate the active
+  game. Desktop and phone modal timing and host proof-navigation checks pass.
+  Frontend build and 17 unit tests pass. See
+  `docs/host-submission-notifications-verification.md` for final browser results.
+- Changes are local and uncommitted. The database migration is live; no application
+  deployment, commit, or push was performed. Preserve the current working tree.
+
+The sections below are historical notes. They do not override this handoff;
+references to session-owned clues, pending wording approval, or 8/12-second
+modal durations are superseded.
 
 ## Latest: random clue rewards and session deletion
 
@@ -157,7 +266,7 @@ Updated 2026-11-12
 - Backend, API modules, models, routes, board-state hooks and clue data remain
   unchanged. Work is local and uncommitted.
 
-## Current state
+## Historical state ? earlier visual pass
 
 - The host header, navigation and Board use the Race Control visual system:
   paper `#FAF6EF`, ink navy `#14213D`, race orange `#FF6A13`, orange tint
@@ -195,11 +304,11 @@ Updated 2026-11-12
 
 ## Next task
 
-Review the completed visual pass with the user and make any requested tweaks.
-The clue wording still requires explicit approval before database population.
-The historical prompt below ends mid-sentence. The user approved continuing with
-the supplied scope and the stated 16px body-text assumption; do not invent further
-requirements from the missing text.
+Map work is complete locally and schema/defaults are live. Verify on an actual
+HTTPS phone game when available. Do not configure the existing active game or
+create hosted scratch games without authorization. Preserve all prior changes;
+do not commit, push or deploy without authorization. See map verification doc
+for final tests and limitations.
 
 ## User prompt
 
