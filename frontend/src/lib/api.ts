@@ -308,6 +308,10 @@ export function submissionPhoto(submissionId: string): Promise<{ url: string|nul
   );
 }
 
+export function setTeamLocationVisibility(sessionId:string,teamId:string,visible:boolean):Promise<{ok:boolean}> {
+  return request(`/api/admin/sessions/${sessionId}/map/teams/${teamId}/visibility`,{method:'PUT',body:{visible}});
+}
+
 export function addChallenge(
   sessionId: string,
   input: {

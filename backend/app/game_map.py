@@ -71,7 +71,7 @@ def public_map(session:dict,locations:list[dict],now:datetime | None=None) -> di
     timed=max((i for i,s in enumerate(stages) if s.get('after_seconds') is not None and s['after_seconds']<=elapsed),default=0)
     index=min(max(timed,session.get('map_stage_floor',0)),max(0,len(stages)-1))
     next_stage=next((s for i,s in enumerate(stages) if i>index and s.get('after_seconds') is not None and s['after_seconds']>elapsed),None) if started and active else None
-    return {'configured':bool(stages),'initial_area':stages[0] if stages else None,
+    return {'configured':bool(stages),'visibility_revision':session.get('map_visibility_revision',0),'initial_area':stages[0] if stages else None,
             'area':stages[index] if stages else None,'stage_index':index,'stage_count':len(stages),
             'started_at':started,'paused_at':paused,'next_shrink_at':(utc(started)+timedelta(seconds=next_stage['after_seconds'])).isoformat() if next_stage else None,
             'server_time':now.isoformat(),'locations':locations if active else []}

@@ -22,7 +22,7 @@ from typing import Any
 
 from fastapi import WebSocket
 
-from app import snapshots
+from app import snapshots,repo
 
 log = logging.getLogger(__name__)
 
@@ -98,6 +98,9 @@ class Hub:
     def presence(self, session_id: str) -> int:
         return len(self._room(session_id))
 
+    def room_lock(self,session_id:str) -> asyncio.Lock:
+        return self._broadcast_locks.setdefault(session_id,asyncio.Lock())
+
     async def close_room(self, session_id: str) -> None:
         """Disconnect a deleted session without rebuilding its missing snapshot."""
         async def close(sub: Subscriber) -> None:
@@ -126,6 +129,21 @@ class Hub:
         await self.unregister(sub)
 
     async def map_event(self, session_id: str, event: dict[str, Any], *, lease: str | None = None) -> None:
+        async with self.room_lock(session_id):
+            try:
+                policy=await asyncio.to_thread(repo.map_visibility,session_id)
+            except Exception:
+                log.warning('Location visibility unavailable; withholding GPS events')
+                await asyncio.gather(*(self._reconnect(sub) for sub in self._room(session_id)))
+                return
+            await self._map_event(session_id,event,policy,lease=lease)
+
+    async def change_team_visibility(self,session_id:str,team_id:str,visible:bool) -> None:
+        async with self.room_lock(session_id):
+            await asyncio.to_thread(repo.set_team_location_visibility,session_id,team_id,visible)
+            await self._broadcast_room(session_id)
+
+    async def _map_event(self,session_id:str,event:dict[str,Any],policy:dict,*,lease:str|None=None) -> None:
         """Only public map metadata; no game state or private finish in GPS fan-out."""
         point=event.get('location',event)
         async def deliver(sub:Subscriber):
@@ -135,18 +153,18 @@ class Hub:
                     sub.location_until=(datetime.fromisoformat(point['updated_at'].replace('Z','+00:00')).timestamp()+120
                                         if sub.location_lease and secrets.compare_digest(sub.location_lease,lease) else 0)
             if sub.tracking_visible and not sub.can_track:
-                await self._send(sub,{'kind':'map_access','can_track_teams':False,'session_id':session_id})
+                await self._send(sub,{'kind':'map_access','can_track_teams':False,'session_id':session_id,'visibility_revision':policy['revision']})
             if not sub.tracking_visible and sub.can_track and sub.kind=='team' and sub.member:
                 sub.tracking_visible=True
                 payload=await asyncio.to_thread(snapshots.team_payload,sub.member,location_until=sub.location_until)
                 await self._send(sub,payload)
             sub.tracking_visible=sub.can_track
-            if sub.can_track or point.get('team_id')==sub.team_id:
-                await self._send(sub,{**event,'session_id':session_id})
+            if sub.kind=='admin' or point.get('team_id')==sub.team_id or sub.can_track and point.get('team_id') not in policy['hidden_team_ids']:
+                await self._send(sub,{**event,'session_id':session_id,'visibility_revision':policy['revision']})
         await asyncio.gather(*(deliver(sub) for sub in self._room(session_id)))
 
     async def broadcast(self, session_id: str) -> None:
-        async with self._broadcast_locks.setdefault(session_id,asyncio.Lock()):
+        async with self.room_lock(session_id):
             await self._broadcast_room(session_id)
 
     async def _broadcast_room(self, session_id: str) -> None:

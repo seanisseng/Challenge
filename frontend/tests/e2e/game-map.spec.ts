@@ -1,6 +1,6 @@
 import { test,expect,type WebSocketRoute } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { fixtureState } from './board.fixture';
+import { installBoardFixture,fixtureState } from './board.fixture';
 test.beforeEach(async({page})=>{
  page.on('pageerror',error=>{throw error;});
  // Exercise the vector renderer without depending on a public tile server.
@@ -12,7 +12,7 @@ const publicMap=()=>({configured:true,initial_area:stage0,area:stage0,stage_inde
 async function install(page:any,denied=false,fresh=false) {
  const host=fixtureState();
  const state:any={kind:'team',session:host.session,team:{id:'team-0',name:'Team 1'},me:{id:'pool',name:'unused'},board:host.board,progress:host.progress,clues:[],my_submissions:[],clue_awards:[],map:publicMap()};
- let socket:WebSocketRoute|undefined;const calls:string[]=[];let revision=1;
+ let socket:WebSocketRoute|undefined;const calls:string[]=[];let revision=1;const hidden=new Set<string>();
  await page.addInitScript(({denied,fresh}:any)=>{
   if(!fresh)localStorage.setItem('challenge.team-token','map-fixture');
   (window as any).__gpsRequests=0;
@@ -36,10 +36,10 @@ async function install(page:any,denied=false,fresh=false) {
  const snapshot=(ws:WebSocketRoute)=>{
   const url=new URL(ws.url());const device=url.searchParams.get('location_device');
   const allowed=url.searchParams.get('location_lease')==='00000000-0000-0000-0000-000000000002'&&state.map.locations.some((point:any)=>point.device_id===device&&point.team_id==='team-0');
-  return {...state,map:{...state.map,can_track_teams:allowed,locations:allowed?state.map.locations:state.map.locations.filter((point:any)=>point.team_id==='team-0')}};
+  return {...state,map:{...state.map,can_track_teams:allowed,locations:state.map.locations.filter((point:any)=>point.team_id==='team-0'||allowed&&!hidden.has(point.team_id))}};
  };
  await page.routeWebSocket(/\/ws\?/,ws=>{socket=ws;ws.send(JSON.stringify(snapshot(ws)));});
- return {state,calls,push:()=>{state.map.server_time=new Date().toISOString();if(socket)socket.send(JSON.stringify(snapshot(socket)));}};
+ return {state,calls,emit:(event:any)=>socket?.send(JSON.stringify(event)),hideTeam:(team:string,value:boolean)=>{if(value)hidden.add(team);else hidden.delete(team);state.map.visibility_revision=(state.map.visibility_revision??0)+1;},push:()=>{state.map.server_time=new Date().toISOString();if(socket)socket.send(JSON.stringify(snapshot(socket)));}};
 }
 async function openMap(page:any,project:string,dismissPrompt=true) {
  if(project==='desktop')await page.getByRole('button',{name:'Map',exact:true}).click();
@@ -73,6 +73,40 @@ test('opening the map prompts non-sharing players again, but never starts GPS wi
  await expect(prompt).toHaveCount(0);
  await back();
  await openMap(page,info.project.name,false);await expect(prompt).toBeVisible();
+});
+
+test('hidden teams disappear from player maps and delayed pre-hide fixes stay hidden',async({page},info)=>{
+ const fixture=await install(page);
+ const rival={team_id:'rival',team_name:'Rival tracker',device_id:'phone',lat:1.31,lng:103.92,accuracy_m:10,updated_at:new Date().toISOString(),revision:1};
+ fixture.state.map.locations=[rival];await page.goto('/');await openMap(page,info.project.name);
+ await page.getByRole('button',{name:'Share my location',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Stop sharing',exact:true})).toBeVisible();
+ await expect(page.locator('.map-roster')).toContainText('Rival tracker');
+ fixture.hideTeam('rival',true);fixture.push();
+ await expect(page.locator('.map-roster')).not.toContainText('Rival tracker');
+ fixture.emit({kind:'location',session_id:fixture.state.session.id,visibility_revision:0,location:{...rival,revision:99}});
+ await expect(page.locator('.map-roster')).not.toContainText('Rival tracker');
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ fixture.hideTeam('rival',false);fixture.push();await expect(page.locator('.map-roster')).toContainText('Rival tracker');
+});
+
+test('host can hide and restore a team without ending the game',async({page})=>{
+ const fixture=await installBoardFixture(page);
+ fixture.state.map={...publicMap(),plan:{stages:[stage0,stage1]},finish:{lat:1.3,lng:103.9},hidden_team_ids:[],visibility_revision:0};
+ const writes:boolean[]=[];
+ await page.route('**/api/admin/sessions/*/map/teams/*/visibility',async route=>{
+  const visible=route.request().postDataJSON().visible;writes.push(visible);
+  fixture.state.map!.hidden_team_ids=visible?[]:['team-0'];fixture.state.map!.visibility_revision!++;
+  await route.fulfill({json:{ok:true}});fixture.push();
+ });
+ await page.goto('/admin');await page.getByRole('button',{name:'Map',exact:true}).click();
+ const checkbox=page.getByRole('checkbox',{name:'Show Team 1 to other players',exact:true});
+ await expect(checkbox).toBeChecked();await checkbox.click();await expect(checkbox).not.toBeChecked();
+ await expect(page.getByText('Hidden from other players',{exact:true})).toBeVisible();
+ expect(fixture.state.session.status).toBe('active');
+ await page.reload();await page.getByRole('button',{name:'Map',exact:true}).click();await expect(checkbox).not.toBeChecked();
+ await checkbox.click();await expect(checkbox).toBeChecked();expect(writes).toEqual([false,true]);
+ await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
 test('players see the area, opt in to GPS, stop sharing and receive automatic area changes',async({page},info)=>{

@@ -18,7 +18,20 @@ def test_map_and_location_routes_require_credentials(monkeypatch):
     assert client.post('/api/admin/sessions/room/map/seek',json={'elapsed_seconds':1}).status_code==401
     assert client.post('/api/admin/sessions/room/map/pause').status_code==401
     assert client.post('/api/admin/sessions/room/map/resume').status_code==401
+    assert client.put('/api/admin/sessions/00000000-0000-0000-0000-000000000001/map/teams/00000000-0000-0000-0000-000000000002/visibility',json={'visible':False}).status_code==401
     get_settings.cache_clear()
+
+
+def test_host_can_change_team_visibility_with_strict_boolean(monkeypatch):
+    app.dependency_overrides[require_admin]=lambda:True
+    action=AsyncMock();monkeypatch.setattr(hub,'change_team_visibility',action)
+    session='00000000-0000-0000-0000-000000000001';team='00000000-0000-0000-0000-000000000002'
+    try:
+        client=TestClient(app);url=f'/api/admin/sessions/{session}/map/teams/{team}/visibility'
+        assert client.put(url,json={'visible':False}).status_code==200
+        action.assert_awaited_once_with(session,team,False)
+        assert client.put(url,json={'visible':'false'}).status_code==422
+    finally:app.dependency_overrides.clear()
 
 
 def test_location_cannot_target_another_team_or_expose_the_lease(monkeypatch):

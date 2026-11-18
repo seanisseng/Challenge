@@ -1,6 +1,6 @@
 import { lazy,Suspense,useEffect,useMemo,useState } from 'react';
 import type { GameMapState,MapPoint,MapStage } from '../lib/gameMap';
-import { configureMap,startMapTimer,pauseMapTimer,resumeMapTimer,resetMapTimer,shrinkMapArea,seekMapTimer,ApiError } from '../lib/api';
+import { configureMap,startMapTimer,pauseMapTimer,resumeMapTimer,resetMapTimer,shrinkMapArea,seekMapTimer,setTeamLocationVisibility,ApiError } from '../lib/api';
 import {MapPin,Trash2,Plus,RotateCcw,Save,Minimize2,Play,Pause} from 'lucide-react';
 import {ShrinkTimeline} from './ShrinkTimeline';
 import {aggregateTeamLocations} from '../lib/gameMap';
@@ -39,6 +39,13 @@ export function HostMap({sessionId,status,data,onReload,teamNames}:{sessionId:st
   <div className="map-status-strip"><span>{data?.configured?`Area ${data.stage_index+1} of ${data.stage_count}`:'Playing area has not been saved'}</span></div>
   <Suspense fallback={<p role="status">Loading map...</p>}><MapCanvas data={locked&&data?{...data,locations}:preview} finish={finish} preview={stages.slice(locked?(data?.stage_index??0)+1:1)} onChoose={choose} teamNames={teamNames}/></Suspense>
   <div className="map-legend"><span className="map-legend-initial">Starting area</span><span className="map-legend-current">Current / selected area</span><span className="map-legend-future">Upcoming shrink zones</span><span>Red dot: destination, host only</span></div>
+  <section className="map-team-visibility" aria-labelledby="team-visibility-title"><h3 id="team-visibility-title">Team location visibility</h3>
+   <p>Choose which teams appear on other players’ maps. The host and each team can still see their own shared locations. This does not announce arrivals or end the game.</p>
+   <ul>{Object.entries(teamNames).map(([teamId,name])=>{
+    const visible=!(data?.hidden_team_ids??[]).includes(teamId);
+    return <li key={teamId}><label><input type="checkbox" checked={visible} disabled={busy} aria-label={`Show ${name} to other players`} onChange={event=>void run(()=>setTeamLocationVisibility(sessionId,teamId,event.target.checked))}/><strong>{name}</strong><span>{visible?'Shown to other players':'Hidden from other players'}</span></label></li>;
+   })}</ul>
+  </section>
   <div className="map-plan-editor"><div className="map-plan-heading"><h3>Area and shrink schedule</h3>
    <div className="map-plan-actions">
     {!data?.started_at?<button type="button" className="btn-primary" disabled={busy||dirty||!data?.configured||status!=='active'} onClick={()=>void run(()=>startMapTimer(sessionId))}><Play size={16} aria-hidden="true"/>Start shrink countdown</button>:null}

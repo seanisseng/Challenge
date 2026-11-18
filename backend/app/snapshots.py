@@ -99,8 +99,10 @@ def _core(
         "progress": progress,
         "clue_awards": awards,
         "map": public_map(session,locations or []),
+        "_hidden_location_team_ids": session.get('map_hidden_team_ids') or [],
         "_host_map": {"plan":session.get("playing_area") or {'stages':default_plan()['stages']},
-                      "finish":session.get("final_destination") or default_plan()['finish']},
+                      "finish":session.get("final_destination") or default_plan()['finish'],
+                      "hidden_team_ids":session.get('map_hidden_team_ids') or []},
     }
 
 
@@ -178,8 +180,9 @@ def team_payload(
     game_map=core.get('map')
     if game_map is not None:
         can_track=location_until>time.time() and core['session']['status']=='active'
+        hidden=set(core.get('_hidden_location_team_ids',[]))
         game_map={**game_map,'can_track_teams':can_track,
-                  'locations':[point for point in game_map.get('locations',[]) if can_track or point['team_id']==team_id],
+                  'locations':[point for point in game_map.get('locations',[]) if point['team_id']==team_id or can_track and point['team_id'] not in hidden],
                   **{key:None for key in ('started_at','next_shrink_at','paused_at') if key in game_map}}
 
     return {

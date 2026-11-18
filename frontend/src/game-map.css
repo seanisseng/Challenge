@@ -229,3 +229,11 @@
 @media (min-width: 800px) { .map-stage-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media (min-width: 1200px) { .map-stage-grid { grid-template-columns: repeat(3,minmax(0,1fr)); } }
 @media (min-width: 800px) { .map-plan-editor .map-stage-grid .map-plan-actions { min-height: 96px; align-content: flex-start; align-items: flex-start; } }
+.map-team-visibility { padding: var(--space-4); border: 1px solid var(--color-line); border-radius: var(--radius-ticket); background: var(--color-surface); }
+.map-team-visibility h3 { font-family: var(--font-display); font-size: 24px; font-weight: 700; }
+.map-team-visibility > p { max-width: 70ch; margin: var(--space-2) 0 var(--space-4); color: var(--color-muted); line-height: 1.5; }
+.map-team-visibility ul { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,240px),1fr)); gap: var(--space-2); list-style: none; padding: 0; }
+.map-team-visibility label { display: grid; grid-template-columns: 24px minmax(0,1fr); gap: var(--space-1) var(--space-2); align-items: center; min-height: 64px; padding: var(--space-2); cursor: pointer; }
+.map-team-visibility input { width: 20px; height: 20px; accent-color: var(--color-orange-text); }
+.map-team-visibility input:focus-visible { outline: 2px solid var(--color-orange-text); outline-offset: 3px; }
+.map-team-visibility span { grid-column: 2; color: var(--color-muted); font-size: .875rem; }

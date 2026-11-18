@@ -47,11 +47,6 @@ async def websocket_endpoint(
         if not session_id:
             await websocket.close(code=CLOSE_BAD_REQUEST)
             return
-        try:
-            initial = await asyncio.to_thread(snapshots.admin_payload, session_id)
-        except Exception:
-            await websocket.close(code=CLOSE_BAD_REQUEST)
-            return
         sub = Subscriber(ws=websocket, session_id=session_id, kind="admin")
     else:
         member = await asyncio.to_thread(repo.member_by_token, token or "")
@@ -59,7 +54,6 @@ async def websocket_endpoint(
             await websocket.close(code=CLOSE_UNAUTHORIZED)
             return
         until=await asyncio.to_thread(repo.location_access_until,member['team']['id'],location_device,location_lease)
-        initial = await asyncio.to_thread(snapshots.team_payload, member,location_until=until)
         sub = Subscriber(
             ws=websocket,
             session_id=member["session"]["id"],
@@ -68,12 +62,21 @@ async def websocket_endpoint(
             location_device_id=location_device,
             location_lease=location_lease,
             location_until=until,
-            tracking_visible=bool((initial.get('map') or {}).get('can_track_teams')),
+            tracking_visible=until>0,
         )
 
-    await hub.register(sub)
+    # Serialize initial snapshots with visibility changes and live GPS sends.
+    # A reconnect must not install pre-hide coordinates after the host hides a team.
+    async with hub.room_lock(sub.session_id):
+        try:
+            initial=await asyncio.to_thread(snapshots.admin_payload,sub.session_id) if sub.kind=='admin' else await asyncio.to_thread(snapshots.team_payload,sub.member,location_until=sub.location_until)
+            await hub.register(sub)
+            await websocket.send_json(initial)
+        except Exception:
+            await hub.unregister(sub)
+            await websocket.close(code=CLOSE_BAD_REQUEST)
+            return
     try:
-        await websocket.send_json(initial)
         while True:
             # Clients send a heartbeat; anything else is ignored.
             message = await websocket.receive_text()

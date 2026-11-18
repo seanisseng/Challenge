@@ -26,5 +26,7 @@ def test_competing_approvals_have_one_winner_and_one_reward(full_database,same_s
         assert sql(f"select count(*),count(distinct team_id) from team_clues where challenge_id='{challenge}'").stdout.strip()=='1|1'
         assert sql(f"select ch.claimed_by_team_id=s.team_id from challenges ch join submissions s on s.challenge_id=ch.id and s.status='approved' where ch.id='{challenge}'").stdout.strip()=='t'
         assert sql(f"select count(*) from submission_events e join submissions s on s.id=e.submission_id where s.challenge_id='{challenge}' and e.event='approved'").stdout.strip()=='1'
+        assert sql(f"select review_note from submissions where challenge_id='{challenge}' and status='rejected'").stdout.strip()=='Another team has claimed this task.'
+        assert sql(f"select count(*) from submission_events e join submissions s on s.id=e.submission_id where s.challenge_id='{challenge}' and e.event='rejected'").stdout.strip()=='1'
     finally:
         sql(f"delete from game_sessions where id='{session}'")

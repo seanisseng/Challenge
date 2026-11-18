@@ -787,6 +787,15 @@ def map_locations(session_id: str) -> list[dict[str, Any]]:
     return [{**{k:v for k,v in row.items() if k!="teams"},"team_name":row["teams"]["name"]} for row in rows]
 
 
+def map_visibility(session_id: str) -> dict:
+    session=get_session(session_id)
+    return {'hidden_team_ids':session.get('map_hidden_team_ids') or [],'revision':session.get('map_visibility_revision',0)}
+
+
+def set_team_location_visibility(session_id: str,team_id: str,visible: bool) -> int:
+    return rpc('set_team_location_visibility',{'p_session_id':session_id,'p_team_id':team_id,'p_visible':visible},retry=True)
+
+
 def configure_map(session_id: str, plan: dict) -> None:
     rpc("configure_playing_area",{"p_session_id":session_id,"p_plan":plan})
 

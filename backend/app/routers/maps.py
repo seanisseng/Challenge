@@ -20,6 +20,14 @@ class Fix(Share,MapPoint):
 class TimerPosition(BaseModel):
     elapsed_seconds: int=Field(ge=0,le=86400,strict=True)
 
+class TeamVisibility(BaseModel):
+    visible: bool=Field(strict=True)
+
+@admin.put('/{session_id}/map/teams/{team_id}/visibility')
+async def team_visibility(session_id:UUID,team_id:UUID,body:TeamVisibility):
+    await hub.change_team_visibility(str(session_id),str(team_id),body.visible)
+    return {'ok':True}
+
 @admin.post('/{session_id}/map/pause')
 def pause_timer(session_id:str,background:BackgroundTasks):
     repo.pause_map_timer(session_id,True)

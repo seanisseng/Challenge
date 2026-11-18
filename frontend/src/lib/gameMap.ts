@@ -28,15 +28,17 @@ export interface GameMapState {
   configured:boolean; initial_area:MapStage|null; area:MapStage|null;
   stage_index:number;stage_count:number;started_at:string|null;next_shrink_at:string|null;
   paused_at?:string|null;
+  visibility_revision?:number;
   server_time:string;locations:DeviceLocation[];
   /** Host-only fields; excluded by the player snapshot builder. */
-  plan?:{stages:MapStage[]}|null;finish?:MapPoint|null;
+  plan?:{stages:MapStage[]}|null;finish?:MapPoint|null;hidden_team_ids?:string[];
   revisions?:Record<string,number>;
 }
-export type MapEvent = {session_id:string} & ({kind:'map_access';can_track_teams:boolean}|{kind:'location';location:DeviceLocation}|{kind:'location_removed';team_id:string;device_id:string;revision:number});
+export type MapEvent = {session_id:string;visibility_revision?:number} & ({kind:'map_access';can_track_teams:boolean}|{kind:'location';location:DeviceLocation}|{kind:'location_removed';team_id:string;device_id:string;revision:number});
 const key=(team:string,device:string)=>team+':'+device;
 export function applyMapEvent(map:GameMapState|undefined,event:MapEvent,viewerTeamId?:string):GameMapState|undefined {
   if(!map) return map;
+  if((event.visibility_revision??0)<(map.visibility_revision??0))return map;
   if(event.kind==='map_access')return {...map,can_track_teams:event.can_track_teams,locations:event.can_track_teams?map.locations:map.locations.filter(point=>point.team_id===viewerTeamId)};
   const point=event.kind==='location'?event.location:event;
   if(event.kind==='location'&&map.can_track_teams===false&&point.team_id!==viewerTeamId)return map;
@@ -50,6 +52,8 @@ export function applyMapEvent(map:GameMapState|undefined,event:MapEvent,viewerTe
 }
 export function mergeMapSnapshot(previous:GameMapState|undefined,next:GameMapState|undefined):GameMapState|undefined {
   if(!next || !previous) return next;
+  if((next.visibility_revision??0)<(previous.visibility_revision??0))return previous;
+  if((next.visibility_revision??0)>(previous.visibility_revision??0))return next;
   if(next.can_track_teams===false)return next;
   const locations=next.locations.filter(p=>{const known=previous.revisions?.[key(p.team_id,p.device_id)]??-1;return p.revision>known || (p.revision===known && previous.locations.some(old=>old.team_id===p.team_id&&old.device_id===p.device_id&&old.revision===known));});
   for(const p of previous.locations) {

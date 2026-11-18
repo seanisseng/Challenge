@@ -2,8 +2,44 @@ import time
 from datetime import datetime,timezone
 from unittest.mock import AsyncMock,Mock
 import pytest
-from app import snapshots
+from app import snapshots,repo
 from app.realtime import Hub,Subscriber
+
+@pytest.fixture(autouse=True)
+def map_policy(monkeypatch):
+    monkeypatch.setattr(repo,'map_visibility',lambda _:({'hidden_team_ids':[],'revision':0}),raising=False)
+
+def test_host_hidden_team_is_removed_from_player_payload_but_visible_to_itself(monkeypatch):
+    monkeypatch.setattr(repo,'team_submissions',lambda _:[])
+    monkeypatch.setattr(repo,'team_clues',lambda _:[])
+    core={'session':{'id':'room','status':'active'},'board':[],'progress':[],
+          '_hidden_location_team_ids':['rival'],
+          'map':{'visibility_revision':3,'locations':[{'team_id':'own'},{'team_id':'rival'}]}}
+    result=snapshots.team_payload(member(),core=core,location_until=time.time()+60)
+    assert result['map']['locations']==[{'team_id':'own'}]
+    assert '_hidden_location_team_ids' not in result
+    own=snapshots.team_payload(member('rival'),core=core,location_until=time.time()+60)
+    assert {'team_id':'rival'} in own['map']['locations']
+
+@pytest.mark.asyncio
+async def test_hidden_team_gps_never_reaches_other_teams(monkeypatch):
+    monkeypatch.setattr(repo,'map_visibility',lambda _:{'hidden_team_ids':['rival'],'revision':4})
+    hub=Hub();sockets=[Mock(send_json=AsyncMock()) for _ in range(3)]
+    for socket,kind,team in zip(sockets,['team','team','admin'],['own','rival','admin']):
+        await hub.register(Subscriber(ws=socket,session_id='room',kind=kind,member=member(team) if kind=='team' else None,location_until=time.time()+60,tracking_visible=True))
+    await hub.map_event('room',{'kind':'location','location':{'team_id':'rival','device_id':'phone'}})
+    sockets[0].send_json.assert_not_called()
+    assert sockets[1].send_json.call_args.args[0]['visibility_revision']==4
+    assert sockets[2].send_json.call_args.args[0]['kind']=='location'
+
+@pytest.mark.asyncio
+async def test_access_revocation_carries_current_visibility_revision(monkeypatch):
+    monkeypatch.setattr(repo,'map_visibility',lambda _:{'hidden_team_ids':[],'revision':5})
+    hub=Hub();socket=Mock(send_json=AsyncMock())
+    sub=Subscriber(ws=socket,session_id='room',kind='team',member=member(),tracking_visible=True,location_until=0)
+    await hub.register(sub)
+    await hub.map_event('room',{'kind':'location','location':{'team_id':'rival','device_id':'phone'}})
+    assert socket.send_json.call_args.args[0]=={'kind':'map_access','can_track_teams':False,'session_id':'room','visibility_revision':5}
 
 def member(team='own'):
     return {'id':'pool','name':'Team','team':{'id':team,'name':team},'session':{'id':'room'}}

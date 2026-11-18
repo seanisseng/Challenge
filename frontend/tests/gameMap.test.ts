@@ -27,3 +27,14 @@ test('a current fix survives a matching or older game snapshot',()=>{
  const later={...base(),server_time:'2026-11-16T00:03:00Z'};
  assert.equal(mergeMapSnapshot(map,later)!.locations.length,0);
 });
+
+test('host visibility changes purge cached fixes and reject pre-hide events and snapshots',()=>{
+ const before={...base(),visibility_revision:1,can_track_teams:true,locations:[point]};
+ const hidden={...base(),visibility_revision:2,can_track_teams:true,locations:[]};
+ const map=mergeMapSnapshot(before,hidden)!;
+ assert.deepEqual(map.locations,[]);
+ assert.deepEqual(applyMapEvent(map,{kind:'location',session_id:'room',visibility_revision:1,location:{...point,revision:99}})!.locations,[]);
+ assert.deepEqual(mergeMapSnapshot(map,before)!.locations,[]);
+ const restored={...hidden,visibility_revision:3,locations:[point]};
+ assert.deepEqual(mergeMapSnapshot(map,restored)!.locations,[point]);
+});

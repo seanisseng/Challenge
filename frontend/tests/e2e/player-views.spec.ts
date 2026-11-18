@@ -112,6 +112,23 @@ test("rejections privately highlight host feedback and close early or automatica
   await expect(modal).toHaveCount(0);
 });
 
+test('a competing claim shows a rejection modal and removes the task',async({page})=>{
+ const fixture=await playerFixture(page);
+ const proof={id:'losing-proof',challenge_id:fixture.state.board[0].id,status:'pending' as const,photo_path:'proof.jpg',review_note:null,submitted_at:'2026-11-18',reviewed_at:null,team_member_id:'member-1'};
+ fixture.state.my_submissions.push(proof);
+ await page.goto('/');await page.getByRole('button',{name:/Going Bananas/}).click();
+ fixture.state.my_submissions[0]={...proof,status:'rejected',review_note:'Another team has claimed this task.',reviewed_at:'2026-11-18T12:00:00Z'};
+ fixture.state.board=fixture.state.board.slice(1);fixture.push();
+ const dialog=page.getByRole('dialog',{name:'Submission rejected',exact:true});
+ await expect(dialog).toContainText('Another team has claimed this task.');
+ await expect(dialog).toContainText('TASK CLAIMED');
+ await expect(dialog).not.toContainText('TRY AGAIN');
+ await expect(page.locator('.challenge-sheet')).toHaveCount(0);
+ await dialog.getByRole('button',{name:'Back to board'}).click();
+ await expect(page.getByRole('button',{name:/Going Bananas/})).toHaveCount(0);
+ fixture.push();await expect(dialog).toHaveCount(0);
+});
+
 test("flop reveal deals once and reduced motion immediately shows card faces", async ({ page }) => {
   const fixture = await playerFixture(page);
   await page.emulateMedia({ reducedMotion: "no-preference" });

@@ -24,6 +24,7 @@ export function ClueNotifications({ outcome, announcements, onDismissOutcome, on
   }, [outcome?.id, onDismissOutcome]);
 
   const rejected = outcome?.kind === "rejected";
+  const claimed=rejected&&Boolean(outcome.submission.review_note?.match(/another team.*claim|claim.*another team/i));
   return <>
     {outcome ? <div className={`clue-outcome ${rejected ? "clue-outcome--rejected" : ""}`}>
       <RaceDialog title={rejected ? "Submission rejected" : "Clue unlocked!"}
@@ -35,7 +36,7 @@ export function ClueNotifications({ outcome, announcements, onDismissOutcome, on
         }}>{rejected ? "Back to board" : "View your clues"}</button>}>
         <div className="outcome-identity" aria-hidden="true">
           <span className="outcome-symbol">{rejected ? <X size={36} /> : <MailOpen size={40} />}</span>
-          <span className="outcome-stamp">{rejected ? "TRY AGAIN" : <><Check size={16} />ACQUIRED</>}</span>
+          <span className="outcome-stamp">{rejected ? claimed?'TASK CLAIMED':'TRY AGAIN' : <><Check size={16} />ACQUIRED</>}</span>
         </div>
         {outcome.kind === "success" ? <>
           <p className="outcome-intro">Your team acquired a Tier {ROMAN[outcome.clue.tier]} clue.</p>
@@ -45,7 +46,7 @@ export function ClueNotifications({ outcome, announcements, onDismissOutcome, on
           <p className="outcome-note">Saved in Your clues. This closes automatically after 8 seconds.</p>
         </> : <>
           <p className="outcome-intro">{outcome.challengeTitle}</p>
-          <div className="rejection-feedback"><strong>HOST FEEDBACK</strong>
+          <div className="rejection-feedback"><strong>{claimed?'TASK NO LONGER AVAILABLE':'HOST FEEDBACK'}</strong>
             <p>{outcome.submission.review_note?.trim() || "No feedback was provided. Check the challenge requirements before submitting again."}</p>
           </div>
           <p className="outcome-note">Your team only. This closes automatically after 8 seconds.</p>
