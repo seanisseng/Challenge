@@ -222,7 +222,7 @@ test('players get a shrink modal from the board, without timer details or duplic
 test('host sees new-game defaults and can schedule or immediately shrink through both zones',async({page},info)=>{
  const start={lat:1.3108674745426903,lng:103.86352181175857};
  const finish={lat:1.2993920420142073,lng:103.90664926387365};
- const defaults=[0,.35,.7].map((fraction,i)=>({lat:start.lat+fraction*(finish.lat-start.lat),lng:start.lng+fraction*(finish.lng-start.lng),radius_m:[7000,5000,3000][i],after_seconds:i===0?0:null}));
+ const defaults=[0,.35,.7].map((fraction,i)=>({lat:start.lat+fraction*(finish.lat-start.lat),lng:start.lng+fraction*(finish.lng-start.lng),radius_m:[7000,5000,3000][i],after_seconds:i*3600}));
  const host:any=fixtureState();host.map={...publicMap(),initial_area:defaults[0],area:defaults[0],stage_count:3,plan:{stages:defaults},finish};
  const writes:any[]=[];let socket:WebSocketRoute|undefined;
  await page.addInitScript(()=>{localStorage.setItem('challenge.admin-token','map-host');localStorage.setItem('challenge.admin-session','design-session');});
@@ -242,8 +242,8 @@ test('host sees new-game defaults and can schedule or immediately shrink through
  await expect(page.getByRole('spinbutton',{name:'Stage 1 radius (km)',exact:true})).toHaveValue('7');
  await expect(page.getByRole('spinbutton',{name:'Stage 2 radius (km)',exact:true})).toHaveValue('5');
  await expect(page.getByRole('spinbutton',{name:'Stage 3 radius (km)',exact:true})).toHaveValue('3');
- await expect(page.getByRole('spinbutton',{name:'Stage 2 after (minutes)',exact:true})).toBeEmpty();
- await expect(page.getByRole('spinbutton',{name:'Stage 3 after (minutes)',exact:true})).toBeEmpty();
+ await expect(page.getByRole('spinbutton',{name:'Stage 2 after (minutes)',exact:true})).toHaveValue('60');
+ await expect(page.getByRole('spinbutton',{name:'Stage 3 after (minutes)',exact:true})).toHaveValue('120');
  await page.getByRole('spinbutton',{name:'Stage 2 after (minutes)',exact:true}).fill('10');
  await page.getByRole('spinbutton',{name:'Stage 3 after (minutes)',exact:true}).fill('20');
  await expect(page.getByRole('button',{name:'Shrink area',exact:true})).toBeDisabled();

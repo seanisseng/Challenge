@@ -50,7 +50,7 @@ def default_plan() -> dict:
     stages=[]
     for fraction,radius in ((0,7000),(.35,5000),(.7,3000)):
         stages.append({**{key:start[key]+fraction*(finish[key]-start[key]) for key in start},
-                       'radius_m':radius,'after_seconds':0 if not stages else None})
+                       'radius_m':radius,'after_seconds':len(stages)*3600})
     return {'finish':finish,'stages':stages}
 
 

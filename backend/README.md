@@ -3,6 +3,15 @@
 For multi-image/video/text proof submission, compressed upload copies, and
 migration 26 deployment requirements, see [Submission evidence](../docs/submission-evidence.md).
 
+Session deletion now includes durable Storage cleanup and shared-reference
+preservation. See [Complete session deletion](../docs/session-deletion.md) for
+migration 28, automatic retry behavior and operational checks.
+
+New games default to Stage 2 at 60 minutes and Stage 3 at 120 minutes. Migration
+29 (`20261118081829`, applied 2026-11-18) changes the database insert default;
+existing saved schedules are not modified. The host can still edit these values
+or clear them for manual-only stages.
+
 FastAPI service plus the **Postgres/Supabase data layer** for the scavenger
 hunt. The database folder (`supabase/`) is the heart of the project: the
 sniping and clue-unlock mechanics are enforced in Postgres so they stay

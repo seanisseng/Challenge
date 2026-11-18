@@ -1,0 +1,2 @@
+-- Future games use 60 / 120 minute shrink defaults. Existing schedules are unchanged.
+alter table public.game_sessions alter column playing_area set default '{"stages": [{"lat": 1.3108674745426903, "lng": 103.86352181175857, "radius_m": 7000, "after_seconds": 0}, {"lat": 1.3068510731577212, "lng": 103.87861641999885, "radius_m": 5000, "after_seconds": 3600}, {"lat": 1.3028346717727521, "lng": 103.89371102823912, "radius_m": 3000, "after_seconds": 7200}]}'::jsonb;

@@ -12,7 +12,7 @@ def test_requested_defaults_keep_finish_inside_and_allow_start_outside_final():
     assert (start['lat'],start['lng'])==(1.3108674745426903,103.86352181175857)
     assert value['finish']=={'lat':1.2993920420142073,'lng':103.90664926387365}
     assert [s['radius_m'] for s in value['stages']]==[7000,5000,3000]
-    assert [s['after_seconds'] for s in value['stages']]==[0,None,None]
+    assert [s['after_seconds'] for s in value['stages']]==[0,3600,7200]
     assert distance(start,value['stages'][-1])>3000
 
 

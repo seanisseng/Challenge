@@ -102,6 +102,8 @@ def test_manual_shrink_uses_current_timed_stage_and_handles_manual_only(mapped_g
     assert sql(f"select shrink_map_area('{session}')").stdout.strip()=='2'
     sql(f"select set_map_timer('{session}',false)")
     plan=default_plan()
+    plan['stages'][1]['after_seconds']=None
+    plan['stages'][2]['after_seconds']=None
     sql(f"select configure_playing_area('{session}','{json.dumps(plan)}')")
     sql(f"select set_map_timer('{session}',true)")
     before=sql(f"select map_started_at from game_sessions where id='{session}'").stdout
