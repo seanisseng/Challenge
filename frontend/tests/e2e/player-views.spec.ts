@@ -382,6 +382,63 @@ test('text-only proof survives a failed submit and can be retried',async({page})
  expect(uploads[0]).not.toContain('filename=');
 });
 
+test('pending proofs block another upload until rejected',async({page})=>{
+ const fixture=await playerFixture(page);
+ fixture.state.board[0].my_submission={id:'pending-proof',status:'pending',review_note:null,submitted_at:'2026-11-18'};
+ await page.goto('/');await page.getByRole('button',{name:/Going Bananas/}).click();
+ await expect(page.getByRole('button',{name:'Awaiting host review',exact:true})).toBeDisabled();
+ await expect(page.getByLabel('Attach images or videos')).toHaveCount(0);
+ expect(fixture.uploads).toHaveLength(0);
+ fixture.state.board[0].my_submission={...fixture.state.board[0].my_submission!,status:'rejected'};fixture.push();
+ await expect(page.getByRole('textbox',{name:/Message/})).toBeVisible();
+ await page.getByRole('textbox',{name:/Message/}).fill('Trying again');
+ await expect(page.getByRole('button',{name:'Submit',exact:true})).toBeEnabled();
+});
+
+test('a silent live socket reconnects and restores a fresh snapshot',async({page})=>{
+ await page.clock.install();const fixture=await playerFixture(page);let connections=0;
+ await page.routeWebSocket(/\/ws\?/,ws=>{connections++;ws.send(JSON.stringify(fixture.state));ws.onMessage(()=>{/* Simulate a connection that no longer answers pings. */});});
+ await page.goto('/');await expect(page.getByText('Live',{exact:true})).toBeVisible();
+ fixture.state.team.name='Fresh after reconnect';
+ await page.clock.runFor(61_100);
+ await expect.poll(()=>connections).toBeGreaterThan(1);
+ await expect(page.locator('.player-identity')).toHaveText('Fresh after reconnect');
+ await expect(page.getByText('Live',{exact:true})).toBeVisible();
+});
+
+test('message and attachment draft recover after a reload',async({page})=>{
+ const fixture=await playerFixture(page);await page.goto('/');
+ await page.getByRole('button',{name:/Going Bananas/}).click();
+ await page.getByRole('textbox',{name:/Message/}).fill('Keep this draft');
+ await page.locator('input[type=file]').setInputFiles({name:'recover.png',mimeType:'image/png',buffer:Buffer.from('recoverable image')});
+ await expect(page.getByText('Draft saved on this device.',{exact:true})).toBeVisible();
+ await page.reload();await page.getByRole('button',{name:/Going Bananas/}).click();
+ await expect(page.getByRole('textbox',{name:/Message/})).toHaveValue('Keep this draft');
+ await expect(page.getByRole('list',{name:'Attached files'})).toContainText('recover.png');
+ expect(fixture.uploads).toHaveLength(0);
+ await page.getByRole('button',{name:'Submit',exact:true}).click();
+ await expect.poll(()=>fixture.uploads.length).toBe(1);
+ await expect(page.locator('.challenge-sheet')).toHaveCount(0);
+ await expect.poll(()=>page.evaluate(async()=>{
+  const db=await new Promise<IDBDatabase>(resolve=>{const r=indexedDB.open('challenge-proof-drafts',1);r.onsuccess=()=>resolve(r.result);});
+  return new Promise<number>(resolve=>{const tx=db.transaction('drafts');const r=tx.objectStore('drafts').count();r.onsuccess=()=>resolve(r.result);tx.oncomplete=()=>db.close();});
+ })).toBe(0);
+});
+
+test('uploads show progress, allow cancellation and retain the draft',async({page})=>{
+ await playerFixture(page);
+ let release!:()=>void;const waiting=new Promise<void>(resolve=>{release=resolve;});
+ await page.route('**/api/submissions',async route=>{await waiting;try{await route.fulfill({json:{ok:true}});}catch{/* Cancelled request. */}});
+ await page.goto('/');await page.getByRole('button',{name:/Going Bananas/}).click();
+ await page.getByRole('textbox',{name:/Message/}).fill('Keep after cancelling');
+ await page.getByRole('button',{name:'Submit',exact:true}).click();
+ await expect(page.getByRole('progressbar',{name:'Upload progress'})).toBeVisible();
+ await page.getByRole('button',{name:'Cancel upload',exact:true}).click();release();
+ await expect(page.locator('.challenge-sheet').getByRole('alert')).toContainText('Upload cancelled');
+ await expect(page.getByRole('textbox',{name:/Message/})).toHaveValue('Keep after cancelling');
+ await expect(page.getByRole('button',{name:'Submit',exact:true})).toBeEnabled();
+});
+
 test("live snapshots preserve hidden, revealed, pending and ended views", async ({ page }) => {
   const fixture = await playerFixture(page);
   fixture.state.session.board_visible = false;

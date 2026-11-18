@@ -10,7 +10,7 @@ import {SubmissionComposer} from './SubmissionComposer';
 import {draftError} from '../lib/submissionDraft';
 import type {SubmissionDraft} from '../lib/submissionDraft';
 
-export function ChallengeSheet({ challenge, busy, error, trigger, onClose, onUpload,draft,onDraftChange }: {
+export function ChallengeSheet({ challenge, busy, error, trigger, onClose, onUpload,draft,onDraftChange,uploadProgress=0,onCancelUpload,draftStatus,draftStorageError,draftLoading=false }: {
   challenge: Challenge;
   busy: boolean;
   error: string | null;
@@ -19,11 +19,17 @@ export function ChallengeSheet({ challenge, busy, error, trigger, onClose, onUpl
   onUpload: (draft:SubmissionDraft) => Promise<boolean>;
   draft:SubmissionDraft;
   onDraftChange:(draft:SubmissionDraft)=>void;
+  uploadProgress?:number;
+  onCancelUpload?:()=>void;
+  draftStatus?:string;
+  draftStorageError?:boolean;
+  draftLoading?:boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const drag = useRef<{ y: number; time: number } | null>(null);
   const edgeStart = useRef<{ x: number; y: number } | null>(null);
   const submission = challenge.my_submission;
+  const pending=submission?.status==='pending';
 
   useEffect(() => {
     const element = dialog.current;
@@ -91,14 +97,19 @@ export function ChallengeSheet({ challenge, busy, error, trigger, onClose, onUpl
           : `Rejected${submission.review_note ? `: ${submission.review_note}` : ". You can try again."}`}
       </p> : null}
       {error ? <p role="alert" className="sheet-error">{error}</p> : null}
-      <SubmissionComposer draft={draft} onChange={onDraftChange} disabled={busy||challenge.status==='claimed'}/>
+      {!pending?<SubmissionComposer draft={draft} onChange={onDraftChange} disabled={busy||draftLoading||challenge.status==='claimed'}/>:null}
+      {!pending&&draftStatus?<p className="proof-limits" role={draftStorageError?'alert':'status'}>{draftStatus}</p>:null}
     </div>
     <div className="sheet-actions">
       <div className="proof-submit-actions">
-      <button type="button" className="btn-primary min-h-12" disabled={busy || challenge.status === "claimed"||Boolean(draftError(draft))}
+      <button type="button" className="btn-primary min-h-12" disabled={busy || draftLoading || pending || challenge.status === "claimed"||Boolean(draftError(draft))}
         onClick={()=>void onUpload(draft)}>
-        {busy?'Preparing and sending…':'Submit'}
+        {pending?'Awaiting host review':busy?'Sending…':'Submit'}
       </button></div>
+      {busy?<div className="proof-upload-status"><progress max={100} value={uploadProgress} aria-label="Upload progress"/>
+        <p role="status">{uploadProgress<100?`Uploading: ${uploadProgress}%`:'Upload sent. Preparing videos and saving your proof…'}</p>
+        <button type="button" className="btn-secondary" onClick={onCancelUpload}>Cancel upload</button>
+      </div>:null}
       <p>First approved submission wins the clue.</p>
     </div>
   </dialog>;

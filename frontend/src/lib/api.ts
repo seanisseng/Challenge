@@ -181,14 +181,33 @@ export function fetchClues(): Promise<Clue[]> {
 export function submitProof(
   challengeId: string,
   draft: SubmissionDraft,
+  options: {signal?:AbortSignal;onProgress?:(percent:number)=>void} = {},
 ): Promise<{ ok: boolean; photo_path: string|null }> {
   const form = new FormData();
   form.append("challenge_id", challengeId);
   for(const file of draft.files)form.append('files',file);
   form.append('text',draft.text.trim());
-  return request<{ ok: boolean; photo_path: string|null }>("/api/submissions", {
-    method: "POST",
-    formData: form,
+  return new Promise((resolve,reject)=>{
+    const xhr=new XMLHttpRequest();
+    const abort=()=>xhr.abort();
+    const cleanup=()=>options.signal?.removeEventListener('abort',abort);
+    xhr.open('POST',`${API_BASE_URL}/api/submissions`);
+    const token=getTeamToken();if(token)xhr.setRequestHeader('X-Team-Token',token);
+    xhr.upload.onprogress=event=>{if(event.lengthComputable)options.onProgress?.(Math.round(event.loaded/event.total*100));};
+    xhr.upload.onload=()=>options.onProgress?.(100);
+    xhr.onload=()=>{
+      cleanup();let payload;
+      try{payload=JSON.parse(xhr.responseText);}catch{reject(new ApiError('The server returned an unreadable upload response. Refresh to check your submission.',0));return;}
+      if(xhr.status>=200&&xhr.status<300){
+        if(payload?.ok===true)resolve(payload);
+        else reject(new ApiError('Could not confirm the upload response. Checking your submission.',0));
+      }else reject(new ApiError(typeof payload?.detail==='string'?payload.detail:`Upload failed (${xhr.status}).`,xhr.status));
+    };
+    xhr.onerror=()=>{cleanup();reject(new ApiError('The upload connection was interrupted.',0));};
+    xhr.onabort=()=>{cleanup();reject(new DOMException('Upload cancelled','AbortError'));};
+    if(options.signal?.aborted){reject(new DOMException('Upload cancelled','AbortError'));return;}
+    options.signal?.addEventListener('abort',abort,{once:true});
+    xhr.send(form);
   });
 }
 

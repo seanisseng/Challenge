@@ -564,6 +564,21 @@ def submit_evidence(team_id:str,member_id:str,challenge_id:str,attachments:list[
     return rpc('submit_evidence',{'p_team_id':team_id,'p_member_id':member_id,'p_challenge_id':challenge_id,'p_attachments':attachments,'p_text':text})
 
 
+def require_submission_open(session_id: str, team_id: str, challenge_id: str) -> None:
+    challenge = get_challenge(challenge_id)
+    session = get_session(session_id)
+    if challenge['session_id'] != session_id:
+        raise HTTPException(404, 'Challenge not found.')
+    if session['status'] != 'active' or not session.get('board_visible'):
+        raise HTTPException(409, 'The challenge board is not open for submissions.')
+    if challenge['status'] == 'claimed' or not challenge.get('is_active') or challenge.get('is_discarded'):
+        raise HTTPException(409, 'This challenge is no longer available.')
+    pending = (_select('submissions').select('id').eq('team_id',team_id)
+               .eq('challenge_id',challenge_id).eq('status','pending').limit(1).execute().data)
+    if pending:
+        raise HTTPException(409, 'Your proof is awaiting host review. You can try again if it is rejected.')
+
+
 def remove_proof_files(paths:list[str]) -> None:
     try:_client().storage.from_(get_settings().proof_bucket).remove(paths)
     except Exception:log.warning('Could not clean up unsubmitted proof attachments')

@@ -6,7 +6,8 @@ function EvidenceMedia({item,description,onRetry}:{item:EvidenceAttachment;descr
  const [failed,setFailed]=useState(false);
  return <figure className="evidence-file">
   {!item.url||failed?<div className="review-media-state"><p>We could not load this attachment.</p><button type="button" className="btn-secondary" onClick={onRetry}>Retry photo or video</button></div>:item.content_type.startsWith('video/')?<video src={item.url} controls playsInline preload="metadata" aria-label={`Video proof: ${item.name}`} onError={()=>setFailed(true)}/>:<a href={item.url} target="_blank" rel="noreferrer" aria-label="Open full submission photo"><img src={item.url} alt={description} onError={()=>setFailed(true)}/></a>}
-  <figcaption><span>{item.name}</span>{item.url?<a href={item.url} target="_blank" rel="noreferrer">Open attachment</a>:null}</figcaption>
+  <figcaption><span>{item.name}</span>{item.url?<a href={item.url} target="_blank" rel="noreferrer">Open attachment</a>:null}
+    {item.download_url?<a href={item.download_url} download={item.name} target="_blank" rel="noreferrer" aria-label={`Download ${item.name}`}>Download</a>:null}</figcaption>
  </figure>;
 }
 

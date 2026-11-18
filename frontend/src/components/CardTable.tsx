@@ -5,21 +5,31 @@ import { ChallengeSheet } from "./ChallengeSheet";
 import { useCardTable } from "../lib/useCardTable";
 import type { Challenge, SessionInfo } from "../lib/types";
 import type {SubmissionDraft} from '../lib/submissionDraft';
+import {useSubmissionDrafts} from '../lib/useSubmissionDrafts';
 
 interface Props {
   board: Challenge[];
   session: SessionInfo;
+  teamId: string;
   busy: boolean;
   error: string | null;
   reviewNoticeId?: string;
+  uploadProgress?: number;
+  onCancelUpload?:()=>void;
   onUpload: (challengeId: string, draft:SubmissionDraft) => Promise<boolean>;
 }
 
-export function CardTable({ board, session, busy, error, reviewNoticeId, onUpload }: Props) {
+export function CardTable({ board, session, teamId, busy, error, reviewNoticeId, onUpload,uploadProgress,onCancelUpload }: Props) {
   const visible = session.board_visible && session.status === "active";
   const table = useCardTable(board, visible, session.board_reveal_version);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [drafts,setDrafts]=useState<Record<string,SubmissionDraft>>({});
+  const {drafts,save,storageError,saving,restoring}=useSubmissionDrafts(`${session.id}:${teamId}`);
+  const unsaved=Boolean(storageError)&&Object.values(drafts).some(draft=>draft.files.length||draft.text);
+  useEffect(()=>{
+    if(!busy&&!saving&&!unsaved)return;
+    const warn=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue='';};
+    window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);
+  },[busy,saving,unsaved]);
   const [filter, setFilter] = useState<"all" | "open" | "submitted">("all");
   const [moreBelow, setMoreBelow] = useState(false);
   const list = useRef<HTMLUListElement>(null);
@@ -98,7 +108,9 @@ export function CardTable({ board, session, busy, error, reviewNoticeId, onUploa
       </ul>
     </div>}
     {selected ? <ChallengeSheet key={selected.id} challenge={selected} busy={busy} error={error} trigger={trigger.current}
-      onClose={close} draft={drafts[selected.id]??{files:[],text:''}} onDraftChange={draft=>setDrafts(current=>({...current,[selected.id]:draft}))}
-      onUpload={async draft=>{const sent=await onUpload(selected.id,draft);if(sent){setDrafts(current=>{const next={...current};delete next[selected.id];return next;});close();}return sent;}} /> : null}
+      onClose={close} draft={drafts[selected.id]??{files:[],text:''}} onDraftChange={draft=>save(selected.id,draft)}
+      draftStatus={storageError??(restoring?'Restoring saved draft…':saving?'Saving draft on this device…':'Draft saved on this device.')} draftStorageError={Boolean(storageError)} draftLoading={restoring}
+      uploadProgress={uploadProgress} onCancelUpload={onCancelUpload}
+      onUpload={async draft=>{const sent=await onUpload(selected.id,draft);if(sent){save(selected.id,null);close();}return sent;}} /> : null}
   </section>;
 }

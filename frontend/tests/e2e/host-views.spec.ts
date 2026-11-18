@@ -5,6 +5,21 @@ import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { installBoardFixture } from "./board.fixture";
 
+test('reviewed proof has individual host download links',async({page})=>{
+ const fixture=await installBoardFixture(page);fixture.state.submissions[0].status='approved';
+ await page.route('**/api/admin/submissions/*/photo',route=>route.fulfill({json:{url:'/reference.jpg',text:'Previous message',attachments:[
+  {path:'one',name:'photo.jpg',content_type:'image/jpeg',size:100,url:'/reference.jpg',download_url:'https://storage.invalid/photo?token=private&download=photo.jpg'},
+  {path:'two',name:'clip.mp4',content_type:'video/mp4',size:100,url:null,download_url:'https://storage.invalid/clip?token=private&download=clip.mp4'},
+ ]}}));
+ await page.goto('/admin');await page.getByRole('button',{name:/^Review/}).click();
+ await page.getByRole('button',{name:'View / download proof',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'Previous submission'});
+ await expect(dialog).toContainText('Previous message');
+ await expect(dialog.getByRole('link',{name:'Download photo.jpg',exact:true})).toHaveAttribute('href',/download=photo.jpg/);
+ await expect(dialog.getByRole('link',{name:'Download clip.mp4',exact:true})).toHaveAttribute('download','clip.mp4');
+ await expect(dialog.getByRole('button',{name:/^Approve/})).toHaveCount(0);
+});
+
 test('Review displays mixed evidence and text-only submissions',async({page},info)=>{
  const fixture=await installBoardFixture(page);
  const media=[{path:'image',name:'Team image',content_type:'image/jpeg',size:100,url:'/reference.jpg'},

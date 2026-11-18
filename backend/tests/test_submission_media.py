@@ -16,6 +16,7 @@ def evidence(monkeypatch):
     monkeypatch.setattr(repo,'upload_proof',upload)
     monkeypatch.setattr(repo,'submit_evidence',submit,raising=False)
     monkeypatch.setattr(repo,'remove_proof_files',cleanup,raising=False)
+    monkeypatch.setattr(repo,'require_submission_open',Mock(),raising=False)
     monkeypatch.setattr(hub,'broadcast',AsyncMock())
     def prepare(source,destination,content_type):destination.write_bytes(source.read_bytes());return 5
     monkeypatch.setattr(play,'prepare_video',prepare)
@@ -33,6 +34,14 @@ def test_text_only_submission_is_valid(evidence):
     response=client.post('/api/submissions',data={'challenge_id':'challenge','text':'  Our answer  '})
     assert response.status_code==200;upload.assert_not_called()
     submit.assert_called_once_with('team','member','challenge',[],'Our answer')
+
+def test_pending_submission_is_rejected_before_processing_or_storage(evidence,monkeypatch):
+    client,upload,submit,_=evidence
+    monkeypatch.setattr(repo,'require_submission_open',Mock(side_effect=HTTPException(409,'Your proof is awaiting host review.')))
+    prepare=Mock();monkeypatch.setattr(play,'prepare_video',prepare)
+    response=client.post('/api/submissions',data={'challenge_id':'challenge'},files=[('files',('clip.mp4',b'video','video/mp4'))])
+    assert response.status_code==409
+    prepare.assert_not_called();upload.assert_not_called();submit.assert_not_called()
 
 def test_mixed_images_video_and_text_create_one_submission(evidence):
     client,upload,submit,_=evidence
@@ -67,3 +76,4 @@ def test_host_can_review_all_media_or_text_without_changing_approval(evidence,mo
     result=client.get('/api/admin/submissions/proof/photo').json()
     assert len(result['attachments'])==2
     assert result['attachments'][1]['url']=='https://storage.invalid/video'
+    assert result['attachments'][1]['download_url']=='https://storage.invalid/video?download=attachment'

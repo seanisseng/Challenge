@@ -12,6 +12,7 @@ does the filtering and pushes instead.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
 import secrets
@@ -28,6 +29,7 @@ log = logging.getLogger(__name__)
 # One unresponsive phone must not stall the room. Sends run concurrently, so
 # this bounds the whole fan-out rather than each socket.
 SEND_TIMEOUT = 5.0
+RECONCILE_INTERVAL = 30.0
 
 
 @dataclass(eq=False)
@@ -54,6 +56,33 @@ class Hub:
     def __init__(self) -> None:
         self._subs: set[Subscriber] = set()
         self._lock = asyncio.Lock()
+        self._reconciler: asyncio.Task | None = None
+        self._broadcast_locks: dict[str,asyncio.Lock] = {}
+
+    async def start(self) -> None:
+        if self._reconciler is None:
+            self._reconciler = asyncio.create_task(self._reconcile())
+
+    async def close(self) -> None:
+        if self._reconciler:
+            self._reconciler.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._reconciler
+            self._reconciler = None
+
+    async def _reconcile(self) -> None:
+        while True:
+            await asyncio.sleep(RECONCILE_INTERVAL)
+            for session_id in {sub.session_id for sub in list(self._subs)}:
+                await self.broadcast(session_id)
+
+    async def _reconnect(self, sub: Subscriber) -> None:
+        try:
+            await asyncio.wait_for(sub.ws.close(), timeout=1.0)
+        except Exception:
+            pass
+        finally:
+            await self.unregister(sub)
 
     async def register(self, sub: Subscriber) -> None:
         async with self._lock:
@@ -117,6 +146,10 @@ class Hub:
         await asyncio.gather(*(deliver(sub) for sub in self._room(session_id)))
 
     async def broadcast(self, session_id: str) -> None:
+        async with self._broadcast_locks.setdefault(session_id,asyncio.Lock()):
+            await self._broadcast_room(session_id)
+
+    async def _broadcast_room(self, session_id: str) -> None:
         """Rebuild and push a snapshot to everyone watching this session.
 
         The room is read once and every device gets a slice of that read. A
@@ -131,6 +164,7 @@ class Hub:
             data = await asyncio.to_thread(snapshots.room_data, session_id)
         except Exception:
             log.exception("failed to build snapshot for session %s", session_id)
+            await asyncio.gather(*(self._reconnect(sub) for sub in room))
             return
 
         payloads: list[tuple[Subscriber, dict[str, Any]]] = []
@@ -145,6 +179,7 @@ class Hub:
                     continue
             except Exception:
                 log.exception("failed to build payload for a %s subscriber", sub.kind)
+                await self._reconnect(sub)
                 continue
             payloads.append((sub, payload))
 

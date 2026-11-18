@@ -54,6 +54,9 @@ export default function TeamDashboard({ initialState, onLeave,freshJoin=false }:
   const token = getTeamToken();
   const [state, setState] = useState<TeamState>(initialState);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const uploadController=useRef<AbortController|null>(null);
+  const [uploadProgress,setUploadProgress]=useState(0);
+  useEffect(()=>()=>uploadController.current?.abort(),[]);
   const [error, setError] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<"board" | "clues" | "teams" | "map">("board");
   const sharing=useLocationSharing(state.session.id,state.session.status==="active");
@@ -153,17 +156,36 @@ export default function TeamDashboard({ initialState, onLeave,freshJoin=false }:
 
   const upload = async (challengeId: string, draft:SubmissionDraft):Promise<boolean> => {
     const problem=draftError(draft);if(problem){setError(problem);return false;}
+    if(uploadController.current)return false;
+    const controller=new AbortController();uploadController.current=controller;
     setBusyId(challengeId);
+    setUploadProgress(0);
     setError(null);
     try {
-      await submitProof(challengeId, draft);
+      const fresh=await fetchTeamState();applySnapshot(fresh);
+      const challenge=fresh.board.find(item=>item.id===challengeId);
+      if(challenge?.my_submission?.status==='pending'||fresh.my_submissions.some(item=>item.challenge_id===challengeId&&item.status==='pending')){
+        setError('Your proof is awaiting host review.');return false;
+      }
+      if(controller.signal.aborted)throw new DOMException('Upload cancelled','AbortError');
+      await submitProof(challengeId, draft,{signal:controller.signal,onProgress:setUploadProgress});
       try{applySnapshot(await fetchTeamState());}catch{setError('Submission sent. Refresh the game to see its status.');}
       return true;
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "upload failed");
+      const cancelled=err instanceof DOMException&&err.name==='AbortError';
+      if(cancelled||err instanceof ApiError&&(err.status===0||err.status===409||err.status>=500)){
+        try{
+          const fresh=await fetchTeamState();applySnapshot(fresh);
+          if(fresh.my_submissions.some(item=>item.challenge_id===challengeId&&item.status==='pending')){
+            setError('Your submission was received and is awaiting host review.');return true;
+          }
+        }catch{/* Keep the draft if the response cannot be reconciled. */}
+      }
+      setError(cancelled?'Upload cancelled. Your draft is kept. A request already being saved may still appear shortly.':err instanceof ApiError ? err.message : "Upload failed. Your draft is kept.");
       return false;
     } finally {
       setBusyId(null);
+      uploadController.current=null;
     }
   };
 
@@ -239,12 +261,14 @@ export default function TeamDashboard({ initialState, onLeave,freshJoin=false }:
           {mobileTab==='map'?<PlayingArea data={state.map} status={state.session.status} sharing={sharing} teamId={state.team.id} teamNames={Object.fromEntries(state.progress.map(team=>[team.team_id,team.team_name]))}/>:null}
           <div className={mobileTab === "map" ? "hidden" : mobileTab === "board" ? "player-board-panel min-w-0" : "player-board-panel hidden min-w-0 lg:block"}>
             <CardTable
+              key={`${state.session.id}:${state.team.id}`} teamId={state.team.id}
               board={state.board}
               session={state.session}
               busy={busyId !== null}
               error={error}
               reviewNoticeId={outcomes[0]?.id}
               onUpload={upload}
+              uploadProgress={uploadProgress} onCancelUpload={()=>uploadController.current?.abort()}
             />
           </div>
 

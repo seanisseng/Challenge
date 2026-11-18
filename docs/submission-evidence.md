@@ -12,13 +12,29 @@ and database also enforce this rule.
 3. Select **Submit** to send directly, without a separate review step. The API prepares all files, uploads them, and creates
    one pending submission. Failed requests keep the draft available for retry.
 
-Closing and reopening a challenge keeps its draft while the board remains
-mounted. Drafts are not persisted across a page reload. Some phone formats such
-as HEIC may not preview in every browser; the attached filename remains visible.
+Drafts are saved in IndexedDB on this device, scoped to the game and team,
+and restored after reload. Attachments stay local until Submit. A storage/quota
+failure shows a warning instead of claiming the draft was saved. While a draft
+is being saved, or an upload is running, the browser warns before leaving.
+Private browsing, cleared site data or browser eviction can remove saved drafts.
+Some phone formats such as HEIC may not preview in every browser; the attached
+filename remains visible. WebKit's Blob-storage failure falls back to bounded
+4 MiB binary chunks, rather than one huge JavaScript buffer per video.
+
+The form shows upload percentage, followed by a preparing/saving state, and has
+a Cancel upload button. Cancel aborts the browser request and retains the draft.
+The server checks disconnection before processing another video, uploading files
+or registering proof. An encoder already running may finish its current clip.
+A request committed just before cancellation can still appear; the client checks
+the latest snapshot before offering another attempt. Pending proofs block a
+second submission, including a server preflight before any video processing.
 
 The host's existing Review tab displays every attachment and the message. Videos
 have native playback controls. Approval, rejection, first-approved-wins locking,
 and clue rewards continue through the existing decision endpoints.
+The decision log's **View / download proof** button opens reviewed evidence;
+each attachment has a short-lived signed **Download** link. Downloads are the
+stored upload copies (including compressed video), not original phone recordings.
 
 ## Video copies on Supabase Free
 
@@ -38,7 +54,7 @@ Storage rather than buffering whole videos in memory. At most two encoders run
 concurrently per server process. Deployment needs temporary disk space, an
 executable FFmpeg binary, and request/body/proxy timeouts sufficient for the
 original recording upload and encoding (up to five minutes per clip). Multiple
-workers each have their own encoder limit. No background upload service is added.
+No background upload service is added.
 
 ## Deployment
 
@@ -62,6 +78,16 @@ partial-upload cleanup, host media signing, real FFmpeg encoding including the
 edit/submit sequence, draft retention, retry after errors, legacy photo
 review, and mixed/text-only host review on desktop, touch Chromium and iPhone
 WebKit. Live hosted tests remain disabled.
+
+Workflow recovery verification: the backend suite passed with 168 tests and
+three intentionally skipped live tests; the final heartbeat/preflight/runner
+checks passed separately (26 tests, including the added heartbeat case).
+All 21 focused browser checks passed across desktop, touch Chromium and iPhone
+WebKit: pending-proof blocking, direct submission/retry, progress/cancellation,
+draft reload recovery, silent-socket reconnection and previous-proof downloads.
+The 34 frontend unit tests, type checking and production build passed. These
+checks use local fixtures; they do not claim the changes are deployed to an API
+host or that storage quota is unlimited.
 
 Final checks: the backend regression suite passed; the added schema compatibility
 and upload API checks passed (11 tests); encoder checks passed (6 tests), including

@@ -76,7 +76,9 @@ async def websocket_endpoint(
         await websocket.send_json(initial)
         while True:
             # Clients send a heartbeat; anything else is ignored.
-            await websocket.receive_text()
+            message = await websocket.receive_text()
+            if message == 'ping':
+                await websocket.send_json({'kind':'pong'})
     except WebSocketDisconnect:
         pass
     except Exception:

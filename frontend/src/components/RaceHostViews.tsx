@@ -4,6 +4,7 @@ import { ApiError, listClues } from "../lib/api";
 import type { AdminState, AdminSubmission, AdminTeam, Clue, Tier } from "../lib/types";
 import { TeamProgressCards, NoTeams, emptyTierCounts, type TierCounts } from "./TeamProgressCards";
 import { SubmissionEvidenceView } from "./SubmissionEvidenceView";
+import {RaceDialog} from './RaceDialog';
 import { SubmissionStatusBadge, TierBadge } from "./Badges";
 
 function PageHeading({ eyebrow, title, children }: { eyebrow: string; title: string; children: React.ReactNode }) {
@@ -25,10 +26,11 @@ export function ReviewTab({ submissions, selectedId, onSelect, onApprove, onReje
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [shortcuts, setShortcuts] = useState(true);
+  const [previous,setPrevious]=useState<AdminSubmission|null>(null);
   const actionRef = useRef<(action: "approve" | "reject") => void>(() => {});
 
   const decide = async (action: "approve" | "reject") => {
-    if (!selected || busy) return;
+    if (!selected || busy || previous) return;
     setBusy(true);
     try { await (action === "approve" ? onApprove : onReject)(selected.id, notes[selected.id]?.trim() || undefined); }
     finally { setBusy(false); }
@@ -62,7 +64,8 @@ export function ReviewTab({ submissions, selectedId, onSelect, onApprove, onReje
         </div>
       </article>
     </div>}
-    {history.length ? <section className="review-history"><div className="board-section-heading"><div><span className="race-section-index">02</span><h3>DECISION LOG</h3></div><span>{history.length} reviewed</span></div><ul>{history.map(item => <li key={item.id}><span><strong>{item.teams?.name ?? "Team"}</strong><span>{item.challenges?.title ?? "Challenge"}</span></span><SubmissionStatusBadge status={item.status} />{item.review_note ? <p>{item.review_note}</p> : null}</li>)}</ul></section> : null}
+    {history.length ? <section className="review-history"><div className="board-section-heading"><div><span className="race-section-index">02</span><h3>DECISION LOG</h3></div><span>{history.length} reviewed</span></div><ul>{history.map(item => <li key={item.id}><span><strong>{item.teams?.name ?? "Team"}</strong><span>{item.challenges?.title ?? "Challenge"}</span></span><SubmissionStatusBadge status={item.status} /><button type="button" className="btn-secondary" onClick={()=>setPrevious(item)}>View / download proof</button>{item.review_note ? <p>{item.review_note}</p> : null}</li>)}</ul></section> : null}
+    {previous?<RaceDialog title="Previous submission" onClose={()=>setPrevious(null)}><p>{previous.teams?.name??"Team"} / {previous.challenges?.title??"Challenge"}</p><SubmissionStatusBadge status={previous.status}/><SubmissionEvidenceView submission={previous}/></RaceDialog>:null}
   </section>;
 }
 

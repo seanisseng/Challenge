@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import secrets
 import asyncio
+from urllib.parse import urlencode
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
@@ -208,7 +209,12 @@ def reject(
 def photo(submission_id: str) -> dict[str, Any]:
     submission = repo.submission(submission_id)
     attachments=submission.get('attachments') or ([{'path':submission['photo_path'],'name':'Submission photo','content_type':'image/jpeg','size':0}] if submission.get('photo_path') else [])
-    media=[{**item,'url':repo.signed_url(item['path'])} for item in attachments]
+    media=[]
+    for item in attachments:
+        url=repo.signed_url(item['path'])
+        name=(item.get('name') or 'attachment').replace('\\','/').split('/')[-1]
+        download_url=(url+('&' if '?' in url else '?')+urlencode({'download':name})) if url else None
+        media.append({**item,'url':url,'download_url':download_url})
     return {'url':media[0]['url'] if media else None,'attachments':media,'text':submission.get('proof_text') or ''}
 
 

@@ -45,6 +45,7 @@ def state(request:Request,member: dict[str, Any] = Depends(current_member)) -> d
 
 @router.post("/submissions")
 async def submit_proof(
+    request: Request,
     background: BackgroundTasks,
     challenge_id: str = Form(...),
     files: list[UploadFile] | None = File(None),
@@ -61,6 +62,7 @@ async def submit_proof(
     if len(uploads)>10:
         raise HTTPException(status_code=400,detail='Attach at most 10 files per submission.')
     session_id=member['session']['id'];team_id=member['team']['id']
+    await asyncio.to_thread(repo.require_submission_open,session_id,team_id,challenge_id)
     paths=[];attachments=[];registering=False
     with TemporaryDirectory(prefix='challenge-proof-') as directory:
         root=Path(directory);prepared=[];total=0
@@ -78,6 +80,7 @@ async def submit_proof(
         # Validate/prepare every file before anything is uploaded to Storage.
         processed=[]
         for index,(name,source,content_type,video) in enumerate(prepared):
+            if await request.is_disconnected():raise HTTPException(499,'Upload cancelled.')
             duration=None
             if video:
                 output=root/f'{index}.mp4'
@@ -86,6 +89,7 @@ async def submit_proof(
             processed.append((name,source,content_type,duration))
         try:
             for name,source,content_type,duration in processed:
+                if await request.is_disconnected():raise HTTPException(499,'Upload cancelled.')
                 with source.open('rb') as stream:
                     path=await asyncio.to_thread(repo.upload_proof,session_id,team_id,name,stream,content_type)
                 paths.append(path)
@@ -93,6 +97,7 @@ async def submit_proof(
                 if duration is not None:attachment['duration_seconds']=duration
                 attachments.append(attachment)
             registering=True
+            if await request.is_disconnected():raise HTTPException(499,'Upload cancelled.')
             submission_id=await asyncio.to_thread(repo.submit_evidence,team_id,member['id'],challenge_id,attachments,message)
         except Exception as error:
             # An uncertain database response may already have committed. Keep

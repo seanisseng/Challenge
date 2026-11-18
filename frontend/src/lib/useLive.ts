@@ -36,6 +36,7 @@ export function useLiveSocket<T>(
     let heartbeat: number | undefined;
     let retry: number | undefined;
     let attempt = 0;
+    let lastReceived=Date.now();
     let disposed = false;
 
     const clearTimers = () => {
@@ -52,16 +53,21 @@ export function useLiveSocket<T>(
       socket = new WebSocket(url);
 
       socket.onopen = () => {
-        attempt = 0;
-        setStatus("live");
+        lastReceived=Date.now();
         heartbeat = window.setInterval(() => {
+          if(Date.now()-lastReceived>45_000){setStatus('offline');socket?.close();return;}
           if (socket?.readyState === WebSocket.OPEN) socket.send("ping");
         }, HEARTBEAT_MS);
       };
 
       socket.onmessage = (event) => {
         try {
-          handler.current(JSON.parse(event.data as string) as T);
+          const payload=JSON.parse(event.data as string);
+          lastReceived=Date.now();
+          if(payload?.kind==='pong')return;
+          handler.current(payload as T);
+          attempt=0;
+          setStatus('live');
         } catch {
           /* ignore malformed frames */
         }

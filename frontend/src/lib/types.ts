@@ -63,7 +63,7 @@ export interface Clue {
   unlocked_at: string;
 }
 
-export interface EvidenceAttachment {path:string;name:string;content_type:string;size:number;url?:string|null;duration_seconds?:number}
+export interface EvidenceAttachment {path:string;name:string;content_type:string;size:number;url?:string|null;download_url?:string|null;duration_seconds?:number}
 export interface SubmissionRecord {
   id: string;
   challenge_id: string;

@@ -324,6 +324,20 @@ tools). Keep the file in the repo so the schema stays reproducible from source.
 
 ## Backend app
 
+For production, run `python -m app.server` from `backend/`. This entry point
+uses one Uvicorn worker and rejects `WEB_CONCURRENCY` or `UVICORN_WORKERS` values
+other than `1`. Keep the hosting replica/instance count at **one** as well.
+Shared immediate broadcasting across processes is not implemented. `PORT` is
+supported for hosting platforms. Development can continue using `--reload`.
+
+The live hub rebuilds snapshots for connected rooms every 30 seconds as a
+fallback for missed broadcasts. Failed snapshot/payload builds close affected
+sockets so clients reconnect; ping/pong heartbeats detect silent connections.
+Clients show Live after receiving data, and failed reconnects back off. The
+periodic refresh does not replace the single-process requirement for immediate
+updates. Deploy and restart the API to activate these changes; no database
+migration is needed for this workflow update.
+
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1

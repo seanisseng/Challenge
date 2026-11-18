@@ -168,4 +168,43 @@ async def test_payload_failure_does_not_take_the_room_down(
     await hub.broadcast("s1")
 
     assert admin.sent == [{"kind": "admin", "session": "s1"}]
-    assert hub.presence("s1") == 2  # building failed, so the socket was not blamed
+    assert broken.closed  # force a fresh snapshot on reconnect
+    assert hub.presence("s1") == 1
+
+
+@pytest.mark.asyncio
+async def test_snapshot_failure_disconnects_room_for_recovery(monkeypatch):
+    def fail(_):raise RuntimeError('database unavailable')
+    monkeypatch.setattr(snapshots,'room_data',fail)
+    hub=realtime.Hub();socket=StubSocket()
+    await hub.register(realtime.Subscriber(ws=socket,session_id='room',kind='admin'))
+    await hub.broadcast('room')
+    assert socket.closed
+    assert hub.presence('room')==0
+
+
+@pytest.mark.asyncio
+async def test_periodic_reconciliation_refreshes_without_a_mutation(stub_snapshots,monkeypatch):
+    monkeypatch.setattr(realtime,'RECONCILE_INTERVAL',0.01)
+    hub=realtime.Hub();socket=StubSocket()
+    await hub.register(realtime.Subscriber(ws=socket,session_id='room',kind='admin'))
+    await hub.start()
+    try:
+        for _ in range(50):
+            if socket.sent:break
+            await asyncio.sleep(.01)
+        assert socket.sent==[{'kind':'admin','session':'room'}]
+    finally:await hub.close()
+
+
+def test_websocket_heartbeat_replies_without_exposing_game_data(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app import repo
+    monkeypatch.setattr(repo,'member_by_token',lambda _:{'id':'member','team':{'id':'team'},'session':{'id':'room'}})
+    monkeypatch.setattr(repo,'location_access_until',lambda *args:0)
+    monkeypatch.setattr(snapshots,'team_payload',lambda *args,**kwargs:{'kind':'team'})
+    with TestClient(app).websocket_connect('/ws?token=fixture') as socket:
+        assert socket.receive_json()=={'kind':'team'}
+        socket.send_text('ping')
+        assert socket.receive_json()=={'kind':'pong'}

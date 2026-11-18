@@ -11,6 +11,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.map_runtime import map_runtime
+from app.realtime import hub
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
@@ -21,8 +22,11 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await map_runtime.start()
+    await hub.start()
     try:yield
-    finally:await map_runtime.close()
+    finally:
+        await hub.close()
+        await map_runtime.close()
 
 
 app = FastAPI(
