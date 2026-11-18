@@ -35,18 +35,11 @@ repo needs Docker or the Supabase CLI to run.
 
 ## Quick Start
 
-The one-shot launcher creates the backend venv, installs both dependency sets,
-and opens a window per service:
-
-```powershell
-.\start.ps1               # first run: installs dependencies
-.\start.ps1 -SkipInstall  # later runs
-.\stop.ps1                # free ports 8000 and 5173
-```
+Use the VS Code tasks below, or run the backend and frontend in separate terminals.
 
 ### VS Code tasks
 
-The same actions are wired up as tasks (`Ctrl+Shift+B` runs the default):
+Development actions are available as tasks (`Ctrl+Shift+B` runs the default):
 
 | Task | Effect |
 |------|--------|
@@ -57,7 +50,9 @@ The same actions are wired up as tasks (`Ctrl+Shift+B` runs the default):
 | `Frontend: Setup (npm install)` | installs `node_modules` |
 | `Frontend: Run` | `vite` on `:5173` |
 | `Frontend: Build` | `tsc --noEmit && vite build` |
-| `Stop All` | frees ports 8000 and 5173 |
+
+Stop development servers with Ctrl+C in their terminals or VS Code's
+**Tasks: Terminate Task** command.
 
 ### Manual equivalent
 

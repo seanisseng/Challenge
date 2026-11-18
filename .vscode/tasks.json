@@ -107,24 +107,6 @@
       "dependsOrder": "parallel",
       "group": { "kind": "build", "isDefault": true },
       "problemMatcher": []
-    },
-    {
-      "label": "Stop All",
-      "type": "shell",
-      "command": "powershell",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\stop.ps1"
-      ],
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": true
-      }
     }
   ]
 }
