@@ -328,6 +328,8 @@ test("help, photo proof and leave retain their interactions", async ({ page }) =
   await card.click();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.locator('input[type="file"]').setInputFiles({ name: "proof.png", mimeType: "image/png", buffer: Buffer.from("local fixture") });
+  expect(uploads).toHaveLength(0);
+  await page.getByRole('button',{name:'Submit',exact:true}).click();
   await expect.poll(() => uploads.length).toBe(1);
   expect(uploads[0]).toContain('name="challenge_id"');
   expect(uploads[0]).toContain('filename="proof.png"');
@@ -337,6 +339,47 @@ test("help, photo proof and leave retain their interactions", async ({ page }) =
   page.once("dialog", dialog => dialog.dismiss());
   await page.getByRole("button", { name: "Leave", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Game 2" })).toBeVisible();
+});
+
+test('proof drafts require evidence, retain edits, and submit mixed attachments directly',async({page},info)=>{
+ const {uploads}=await playerFixture(page);
+ await page.goto('/');
+ const card=page.getByRole('button',{name:/Going Bananas/});await card.click();
+ const review=page.getByRole('button',{name:'Submit',exact:true});
+ await expect(review).toBeDisabled();
+ await page.getByRole('textbox',{name:/Message/}).fill('   ');await expect(review).toBeDisabled();
+ await page.locator('input[type=file]').setInputFiles([
+  {name:'first.png',mimeType:'image/png',buffer:Buffer.from('fixture image')},
+  {name:'clip.mp4',mimeType:'video/mp4',buffer:Buffer.from('fixture video')},
+ ]);
+ await expect(page.getByRole('list',{name:'Attached files'}).locator('li')).toHaveCount(2);
+ expect(uploads).toHaveLength(0);
+ await page.getByRole('textbox',{name:/Message/}).fill('Our evidence for the host');
+ await page.keyboard.press('Escape');await card.click();
+ await expect(page.getByRole('textbox',{name:/Message/})).toHaveValue('Our evidence for the host');
+ await page.getByRole('button',{name:'Remove first.png'}).click();
+ expect(uploads).toHaveLength(0);
+ await page.screenshot({path:`artifacts/proof-review-${info.project.name}.png`});
+ await page.getByRole('button',{name:'Submit',exact:true}).click();
+ await expect.poll(()=>uploads.length).toBe(1);
+ expect(uploads[0]).toContain('filename="clip.mp4"');
+ expect(uploads[0]).not.toContain('filename="first.png"');
+ expect(uploads[0]).toContain('Our evidence for the host');
+ await expect(page.locator('.challenge-sheet')).toHaveCount(0);
+});
+
+test('text-only proof survives a failed submit and can be retried',async({page})=>{
+ const {uploads}=await playerFixture(page);let attempts=0;
+ await page.route('**/api/submissions',async route=>{attempts++;if(attempts===1)await route.fulfill({status:400,json:{detail:'Please try again'}});else{uploads.push(route.request().postData()??'');await route.fulfill({json:{ok:true}});}});
+ await page.goto('/');await page.getByRole('button',{name:/Going Bananas/}).click();
+ await page.getByRole('textbox',{name:/Message/}).fill('Text alone is valid');
+ await page.getByRole('button',{name:'Submit',exact:true}).click();
+ await expect(page.locator('.challenge-sheet').getByRole('alert')).toContainText('Please try again');
+ await expect(page.getByRole('textbox',{name:/Message/})).toHaveValue('Text alone is valid');
+ await page.getByRole('button',{name:'Submit',exact:true}).click();
+ await expect.poll(()=>uploads.length).toBe(1);
+ expect(uploads[0]).toContain('Text alone is valid');
+ expect(uploads[0]).not.toContain('filename=');
 });
 
 test("live snapshots preserve hidden, revealed, pending and ended views", async ({ page }) => {

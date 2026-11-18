@@ -6,17 +6,21 @@ import { ChallengeImage } from "./ChallengeImage";
 import { ProofStatus } from "./ChallengeCard";
 import type { Challenge } from "../lib/types";
 import { lockDialogScroll } from "../lib/dialogScrollLock";
+import {SubmissionComposer} from './SubmissionComposer';
+import {draftError} from '../lib/submissionDraft';
+import type {SubmissionDraft} from '../lib/submissionDraft';
 
-export function ChallengeSheet({ challenge, busy, error, trigger, onClose, onUpload }: {
+export function ChallengeSheet({ challenge, busy, error, trigger, onClose, onUpload,draft,onDraftChange }: {
   challenge: Challenge;
   busy: boolean;
   error: string | null;
   trigger: HTMLButtonElement | null;
   onClose: () => void;
-  onUpload: (file: File | undefined) => void;
+  onUpload: (draft:SubmissionDraft) => Promise<boolean>;
+  draft:SubmissionDraft;
+  onDraftChange:(draft:SubmissionDraft)=>void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const input = useRef<HTMLInputElement>(null);
   const drag = useRef<{ y: number; time: number } | null>(null);
   const edgeStart = useRef<{ x: number; y: number } | null>(null);
   const submission = challenge.my_submission;
@@ -87,15 +91,15 @@ export function ChallengeSheet({ challenge, busy, error, trigger, onClose, onUpl
           : `Rejected${submission.review_note ? `: ${submission.review_note}` : ". You can try again."}`}
       </p> : null}
       {error ? <p role="alert" className="sheet-error">{error}</p> : null}
+      <SubmissionComposer draft={draft} onChange={onDraftChange} disabled={busy||challenge.status==='claimed'}/>
     </div>
     <div className="sheet-actions">
-      <input ref={input} type="file" accept="image/*" capture="environment" className="hidden"
-        onChange={event => { onUpload(event.target.files?.[0]); event.target.value = ""; }} />
-      <button type="button" className="btn-primary min-h-12 w-full" disabled={busy || challenge.status === "claimed"}
-        onClick={() => input.current?.click()}>
-        {busy ? "Uploading proof…" : submission ? "Submit another photo" : "Submit photo proof"}
-      </button>
-      <p>First approved proof wins the clue.</p>
+      <div className="proof-submit-actions">
+      <button type="button" className="btn-primary min-h-12" disabled={busy || challenge.status === "claimed"||Boolean(draftError(draft))}
+        onClick={()=>void onUpload(draft)}>
+        {busy?'Preparing and sending…':'Submit'}
+      </button></div>
+      <p>First approved submission wins the clue.</p>
     </div>
   </dialog>;
 }

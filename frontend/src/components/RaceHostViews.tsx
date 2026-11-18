@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Check, Copy, ExternalLink, ImageOff, Inbox, Keyboard, LoaderCircle, LockKeyhole, Mail, RefreshCw, Route, Ticket, X } from "lucide-react";
-import { ApiError, listClues, submissionPhoto } from "../lib/api";
+import { ArrowRight, Check, Copy, ExternalLink, Inbox, Keyboard, LoaderCircle, LockKeyhole, Mail, Route, Ticket, X } from "lucide-react";
+import { ApiError, listClues } from "../lib/api";
 import type { AdminState, AdminSubmission, AdminTeam, Clue, Tier } from "../lib/types";
 import { TeamProgressCards, NoTeams, emptyTierCounts, type TierCounts } from "./TeamProgressCards";
+import { SubmissionEvidenceView } from "./SubmissionEvidenceView";
 import { SubmissionStatusBadge, TierBadge } from "./Badges";
 
 function PageHeading({ eyebrow, title, children }: { eyebrow: string; title: string; children: React.ReactNode }) {
@@ -22,20 +23,9 @@ export function ReviewTab({ submissions, selectedId, onSelect, onApprove, onReje
   useEffect(() => { if (selectedId) workspaceRef.current?.focus(); }, [selectedId]);
   const selected = pending.find(item => item.id === selectedId) ?? pending[0];
   const [notes, setNotes] = useState<Record<string, string>>({});
-  const [photo, setPhoto] = useState<string | null>(null);
-  const [photoError, setPhotoError] = useState(false);
-  const [reload, setReload] = useState(0);
   const [busy, setBusy] = useState(false);
   const [shortcuts, setShortcuts] = useState(true);
   const actionRef = useRef<(action: "approve" | "reject") => void>(() => {});
-
-  useEffect(() => {
-    let cancelled = false;
-    setPhoto(null); setPhotoError(false);
-    if (selected) submissionPhoto(selected.id).then(result => { if (!cancelled) setPhoto(result.url); })
-      .catch(() => { if (!cancelled) setPhotoError(true); });
-    return () => { cancelled = true; };
-  }, [selected?.id, reload]);
 
   const decide = async (action: "approve" | "reject") => {
     if (!selected || busy) return;
@@ -64,7 +54,7 @@ export function ReviewTab({ submissions, selectedId, onSelect, onApprove, onReje
       <aside className="review-inbox" aria-label="Pending submissions"><p className="race-eyebrow">INCOMING PROOF</p><ol>{pending.map((item, index) => <li key={item.id}><button type="button" className={item.id === selected.id ? "review-inbox-item review-inbox-item--selected" : "review-inbox-item"} onClick={() => onSelect(item.id)} aria-pressed={item.id === selected.id}>
         <span className="review-inbox-number">{String(index + 1).padStart(2, "0")}</span><span><strong>{item.teams?.name ?? "Team"}</strong><span>{item.challenges?.title ?? "Challenge"}</span></span><ArrowRight size={14} aria-hidden="true" /></button></li>)}</ol></aside>
       <article ref={workspaceRef} tabIndex={-1} className="review-workspace" aria-label="Selected submission">
-        <div className="review-media">{photo && !photoError ? <a href={photo} target="_blank" rel="noreferrer" aria-label="Open full submission photo"><img src={photo} alt={`Proof from ${selected.teams?.name ?? "a team"} for ${selected.challenges?.title ?? "the challenge"}`} onError={() => setPhotoError(true)} /></a> : <div className="review-media-state">{photoError ? <ImageOff size={32} aria-hidden="true" /> : <LoaderCircle size={28} className="race-spinner" aria-hidden="true" />}<strong>{photoError ? "We could not load this photo." : "Loading proof..."}</strong>{photoError ? <button type="button" className="btn-secondary" onClick={() => setReload(value => value + 1)}><RefreshCw size={15} aria-hidden="true" />Retry photo</button> : null}</div>}<span className="review-media-caption">SUBMISSION PHOTO <ExternalLink size={12} aria-hidden="true" /></span></div>
+        <SubmissionEvidenceView key={selected.id} submission={selected}/>
         <div className="review-decision"><SubmissionStatusBadge status="pending" /><p className="race-eyebrow">{selected.teams?.name ?? "Team"}</p><h3>{selected.challenges?.title ?? "Challenge"}</h3><p className="review-decision-help">Approve valid proof to award the challenge and unlock its clue. Reject it to let the team try again.</p>
           <label htmlFor="review-note">Note for the team <span>(optional)</span></label><textarea id="review-note" className="field" rows={4} maxLength={280} value={notes[selected.id] ?? ""} onChange={event => setNotes(current => ({ ...current, [selected.id]: event.target.value }))} placeholder="What did you see?" />
           <div className="review-decision-buttons"><button type="button" className="btn-success" disabled={busy} onClick={() => void decide("approve")}><Check size={18} aria-hidden="true" />Approve <kbd>A</kbd></button><button type="button" className="btn-danger" disabled={busy} onClick={() => void decide("reject")}><X size={18} aria-hidden="true" />Reject <kbd>R</kbd></button></div>

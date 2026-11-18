@@ -1,4 +1,6 @@
 import type { MapPoint,MapStage } from "./gameMap";
+import type {SubmissionDraft} from './submissionDraft';
+import type {EvidenceAttachment} from './types';
 /**
  * Thin fetch wrapper around the FastAPI backend.
  *
@@ -178,12 +180,13 @@ export function fetchClues(): Promise<Clue[]> {
 
 export function submitProof(
   challengeId: string,
-  file: File,
-): Promise<{ ok: boolean; photo_path: string }> {
+  draft: SubmissionDraft,
+): Promise<{ ok: boolean; photo_path: string|null }> {
   const form = new FormData();
   form.append("challenge_id", challengeId);
-  form.append("file", file);
-  return request<{ ok: boolean; photo_path: string }>("/api/submissions", {
+  for(const file of draft.files)form.append('files',file);
+  form.append('text',draft.text.trim());
+  return request<{ ok: boolean; photo_path: string|null }>("/api/submissions", {
     method: "POST",
     formData: form,
   });
@@ -280,8 +283,8 @@ export function rejectSubmission(
   );
 }
 
-export function submissionPhoto(submissionId: string): Promise<{ url: string }> {
-  return request<{ url: string }>(
+export function submissionPhoto(submissionId: string): Promise<{ url: string|null;attachments?:EvidenceAttachment[];text?:string }> {
+  return request<{ url: string|null;attachments?:EvidenceAttachment[];text?:string }>(
     `/api/admin/submissions/${submissionId}/photo`,
   );
 }

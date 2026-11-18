@@ -4,6 +4,7 @@ import { CardBack, ChallengeCard, proofStatus } from "./ChallengeCard";
 import { ChallengeSheet } from "./ChallengeSheet";
 import { useCardTable } from "../lib/useCardTable";
 import type { Challenge, SessionInfo } from "../lib/types";
+import type {SubmissionDraft} from '../lib/submissionDraft';
 
 interface Props {
   board: Challenge[];
@@ -11,13 +12,14 @@ interface Props {
   busy: boolean;
   error: string | null;
   reviewNoticeId?: string;
-  onUpload: (challengeId: string, file: File | undefined) => void;
+  onUpload: (challengeId: string, draft:SubmissionDraft) => Promise<boolean>;
 }
 
 export function CardTable({ board, session, busy, error, reviewNoticeId, onUpload }: Props) {
   const visible = session.board_visible && session.status === "active";
   const table = useCardTable(board, visible, session.board_reveal_version);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [drafts,setDrafts]=useState<Record<string,SubmissionDraft>>({});
   const [filter, setFilter] = useState<"all" | "open" | "submitted">("all");
   const [moreBelow, setMoreBelow] = useState(false);
   const list = useRef<HTMLUListElement>(null);
@@ -96,6 +98,7 @@ export function CardTable({ board, session, busy, error, reviewNoticeId, onUploa
       </ul>
     </div>}
     {selected ? <ChallengeSheet key={selected.id} challenge={selected} busy={busy} error={error} trigger={trigger.current}
-      onClose={close} onUpload={file => onUpload(selected.id, file)} /> : null}
+      onClose={close} draft={drafts[selected.id]??{files:[],text:''}} onDraftChange={draft=>setDrafts(current=>({...current,[selected.id]:draft}))}
+      onUpload={async draft=>{const sent=await onUpload(selected.id,draft);if(sent){setDrafts(current=>{const next={...current};delete next[selected.id];return next;});close();}return sent;}} /> : null}
   </section>;
 }

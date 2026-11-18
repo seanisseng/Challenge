@@ -63,11 +63,14 @@ export interface Clue {
   unlocked_at: string;
 }
 
+export interface EvidenceAttachment {path:string;name:string;content_type:string;size:number;url?:string|null;duration_seconds?:number}
 export interface SubmissionRecord {
   id: string;
   challenge_id: string;
   status: SubmissionStatus;
-  photo_path: string;
+  photo_path: string|null;
+  attachments?:EvidenceAttachment[];
+  proof_text?:string|null;
   review_note: string | null;
   submitted_at: string;
   reviewed_at: string | null;
@@ -102,7 +105,9 @@ export interface AdminSubmission {
   challenge_id: string;
   team_id: string;
   team_member_id: string | null;
-  photo_path: string;
+  photo_path: string|null;
+  attachments?:EvidenceAttachment[];
+  proof_text?:string|null;
   status: SubmissionStatus;
   review_note: string | null;
   submitted_at: string;

@@ -5,6 +5,25 @@ import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { installBoardFixture } from "./board.fixture";
 
+test('Review displays mixed evidence and text-only submissions',async({page},info)=>{
+ const fixture=await installBoardFixture(page);
+ const media=[{path:'image',name:'Team image',content_type:'image/jpeg',size:100,url:'/reference.jpg'},
+  {path:'video',name:'Team video',content_type:'video/mp4',size:100,url:'/proof.mp4'}];
+ await page.route('**/api/admin/submissions/*/photo',route=>route.fulfill({json:{url:null,attachments:media,text:'Our mixed evidence'}}));
+ await page.route('**/proof.mp4',route=>route.fulfill({contentType:'video/mp4',body:Buffer.from('local fixture')}));
+ await page.goto('/admin');await page.getByRole('button',{name:/^Review/}).click();
+ await expect(page.getByText('Our mixed evidence',{exact:true})).toBeVisible();
+ await expect(page.getByAltText('Proof from Team 1 for Strava-geddon')).toBeVisible();
+ await expect(page.locator('.evidence-file')).toHaveCount(2);
+ await page.screenshot({path:`artifacts/mixed-evidence-${info.project.name}.png`,fullPage:true});
+ fixture.state.submissions.unshift({...fixture.state.submissions[0],id:'text-proof',teams:{name:'Text team'},photo_path:null,attachments:[],proof_text:'Text alone'});
+ await page.route('**/api/admin/submissions/text-proof/photo',route=>route.fulfill({json:{url:null,attachments:[],text:'Text alone'}}));
+ fixture.push();await page.locator('.review-inbox-item').filter({hasText:'Text team'}).click();
+ await expect(page.getByText('Text alone',{exact:true})).toBeVisible();
+ await expect(page.locator('.evidence-file')).toHaveCount(0);
+ await expect(page.getByRole('button',{name:/^Approve/})).toBeEnabled();
+});
+
 for (const [tab, title, artifact] of [
   ["Review", "Make the call.", "review"],
   ["Team codes", "Get your teams moving.", "team-codes"],
@@ -61,6 +80,7 @@ test("new host submissions notify without blocking and open the exact proof", as
   await page.goto("/admin");
   const clues = page.getByRole("button", { name: "Clues", exact: true });
   await clues.click();
+  await clues.focus();
   const notice = page.getByRole("complementary", { name: "New submissions", exact: true });
   await expect(notice).toHaveCount(0);
   fixture.state.submissions.unshift({ ...fixture.state.submissions[0], id: "new-proof", team_id: "team-1", teams: { name: "Team 2" }, challenge_id: "challenge-1", challenges: { title: "Going Bananas" }, submitted_at: "2026-11-15T14:00:00Z" });

@@ -3,13 +3,14 @@ import {RaceDialog} from './RaceDialog';
 
 export const locationPromptKey=(sessionId:string,teamId:string)=>`challenge.location-prompt:${sessionId}:${teamId}`;
 
-export function LocationSharingPrompt({sessionId,teamId,freshJoin,eligible,onShare,deferred=false}:{sessionId:string;teamId:string;freshJoin:boolean;eligible:boolean;onShare:()=>void;deferred?:boolean}) {
+export function LocationSharingPrompt({sessionId,teamId,freshJoin,eligible,onShare,deferred=false,requestId=0}:{sessionId:string;teamId:string;freshJoin:boolean;eligible:boolean;onShare:()=>void;deferred?:boolean;requestId?:number}) {
  const key=locationPromptKey(sessionId,teamId);
  const [pending,setPending]=useState(()=>{
   try{const value=localStorage.getItem(key);return value==='pending'||(!value&&freshJoin);}catch{return freshJoin;}
  });
- const dismiss=()=>{setPending(false);try{localStorage.setItem(key,'done');}catch{/* Still respect dismissal for this visit. */}};
- if(!pending||!eligible||deferred)return null;
+ const [dismissedRequest,setDismissedRequest]=useState(0);
+ const dismiss=()=>{setPending(false);setDismissedRequest(requestId);try{localStorage.setItem(key,'done');}catch{/* Still respect dismissal for this visit. */}};
+ if((!pending&&requestId<=dismissedRequest)||!eligible||deferred)return null;
  return <RaceDialog title="See your team on the map" eyebrow="LOCATION SHARING" onClose={dismiss} footer={<>
   <button type="button" className="btn-secondary" onClick={dismiss}>Not now</button>
   <button type="button" className="btn-primary" onClick={()=>{dismiss();onShare();}}>Share location</button>

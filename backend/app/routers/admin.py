@@ -207,10 +207,9 @@ def reject(
 @router.get("/submissions/{submission_id}/photo")
 def photo(submission_id: str) -> dict[str, Any]:
     submission = repo.submission(submission_id)
-    url = repo.signed_url(submission["photo_path"])
-    if not url:
-        raise HTTPException(status_code=404, detail="photo unavailable")
-    return {"url": url}
+    attachments=submission.get('attachments') or ([{'path':submission['photo_path'],'name':'Submission photo','content_type':'image/jpeg','size':0}] if submission.get('photo_path') else [])
+    media=[{**item,'url':repo.signed_url(item['path'])} for item in attachments]
+    return {'url':media[0]['url'] if media else None,'attachments':media,'text':submission.get('proof_text') or ''}
 
 
 # --------------------------------------------------------------------------- #

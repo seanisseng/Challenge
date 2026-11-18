@@ -41,13 +41,39 @@ async function install(page:any,denied=false,fresh=false) {
  await page.routeWebSocket(/\/ws\?/,ws=>{socket=ws;ws.send(JSON.stringify(snapshot(ws)));});
  return {state,calls,push:()=>{state.map.server_time=new Date().toISOString();if(socket)socket.send(JSON.stringify(snapshot(socket)));}};
 }
-async function openMap(page:any,project:string) {
+async function openMap(page:any,project:string,dismissPrompt=true) {
  if(project==='desktop')await page.getByRole('button',{name:'Map',exact:true}).click();
  else await page.getByRole('navigation',{name:'Game views'}).getByRole('button',{name:'Map',exact:true}).click();
  await expect(page.getByRole('region',{name:'Playing area map'})).toBeVisible();
  await expect(page.locator('.maplibregl-canvas')).toBeVisible();
  await expect(page.getByText('Map tiles could not load.',{exact:false})).toHaveCount(0);
+ const prompt=page.getByRole('dialog',{name:'See your team on the map'});
+ if(dismissPrompt&&await prompt.isVisible())await prompt.getByRole('button',{name:'Not now',exact:true}).click();
 }
+
+test('opening the map prompts non-sharing players again, but never starts GPS without consent',async({page},info)=>{
+ const fixture=await install(page);await page.goto('/');
+ const back=()=>info.project.name==='desktop'?page.getByRole('button',{name:'Back to board',exact:true}).click():page.getByRole('navigation',{name:'Game views'}).getByRole('button',{name:'The board',exact:true}).click();
+ const prompt=page.getByRole('dialog',{name:'See your team on the map'});
+ await expect(prompt).toHaveCount(0);
+ await openMap(page,info.project.name,false);await expect(prompt).toBeVisible();
+ await expect(prompt).toContainText('If you decline or stop sharing, their trackers stay hidden.');
+ expect(fixture.calls).toEqual([]);expect(await page.evaluate(()=>(window as any).__gpsRequests)).toBe(0);
+ await prompt.getByRole('button',{name:'Not now',exact:true}).click();
+ await expect(prompt).toHaveCount(0);
+ fixture.push();await expect(prompt).toHaveCount(0);
+ await back();
+ await openMap(page,info.project.name,false);await expect(prompt).toBeVisible();
+ await prompt.getByRole('button',{name:'Share location',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Stop sharing',exact:true})).toBeVisible();
+ expect(fixture.calls).toEqual(['start','fix']);
+ await back();
+ await openMap(page,info.project.name,false);await expect(prompt).toHaveCount(0);
+ await page.getByRole('button',{name:'Stop sharing',exact:true}).click();
+ await expect(prompt).toHaveCount(0);
+ await back();
+ await openMap(page,info.project.name,false);await expect(prompt).toBeVisible();
+});
 
 test('players see the area, opt in to GPS, stop sharing and receive automatic area changes',async({page},info)=>{
  const fixture=await install(page);await page.goto('/');await openMap(page,info.project.name);

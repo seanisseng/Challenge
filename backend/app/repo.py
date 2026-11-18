@@ -352,6 +352,20 @@ def team_submissions(team_id: str) -> list[dict[str, Any]]:
     return submissions_by_team([team_id]).get(team_id, [])
 
 
+def _submission_rows(columns: str, configure) -> list[dict[str, Any]]:
+    """Allow board reads during a rolling deployment of the evidence schema."""
+    try:
+        return configure(_select("submissions").select(columns)).execute().data
+    except APIError as exc:
+        # Only tolerate these two pending-migration columns. Permissions,
+        # connectivity and other schema errors must still surface.
+        message = (getattr(exc, "message", "") or "").lower()
+        if exc.code != "42703" or not any(field in message for field in ("attachments", "proof_text")):
+            raise
+        legacy = columns.replace(",attachments,proof_text", "")
+        return configure(_select("submissions").select(legacy)).execute().data
+
+
 def submissions_by_team(team_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
     """Every team's submissions in one query, keyed by team.
 
@@ -362,16 +376,9 @@ def submissions_by_team(team_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
     if not team_ids:
         return out
 
-    rows = (
-        _select("submissions")
-        .select(
-            "id,challenge_id,team_id,status,photo_path,review_note,"
-            "submitted_at,reviewed_at,team_member_id"
-        )
-        .in_("team_id", team_ids)
-        .order("submitted_at", desc=True)
-        .execute()
-        .data
+    rows = _submission_rows(
+        "id,challenge_id,team_id,status,photo_path,attachments,proof_text,review_note,submitted_at,reviewed_at,team_member_id",
+        lambda query: query.in_("team_id", team_ids).order("submitted_at", desc=True),
     )
     for row in rows:
         row = dict(row)
@@ -381,20 +388,14 @@ def submissions_by_team(team_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
 
 
 def session_submissions(session_id: str, status: str | None = None) -> list[dict[str, Any]]:
-    query = (
-        _select("submissions")
-        .select(
-            "id,session_id,challenge_id,team_id,team_member_id,photo_path,status,"
-            "review_note,submitted_at,reviewed_at,"
-            "challenges!inner(title),teams!inner(name),"
-            "team_members(name)"
-        )
-        .eq("session_id", session_id)
-        .order("submitted_at", desc=True)
+    def configure(query):
+        query = query.eq("session_id", session_id).order("submitted_at", desc=True)
+        return query.eq("status", status) if status else query
+    return _submission_rows(
+        "id,session_id,challenge_id,team_id,team_member_id,photo_path,attachments,proof_text,status,"
+        "review_note,submitted_at,reviewed_at,challenges!inner(title),teams!inner(name),team_members(name)",
+        configure,
     )
-    if status:
-        query = query.eq("status", status)
-    return query.execute().data
 
 
 TIER_ORDER = {"tier1": 1, "tier2": 2, "tier3": 3}
@@ -559,18 +560,23 @@ def approve_submission(submission_id: str, note: str | None) -> None:
     rpc("approve_submission", {"p_submission_id": submission_id, "p_note": note})
 
 
+def submit_evidence(team_id:str,member_id:str,challenge_id:str,attachments:list[dict],text:str) -> str:
+    return rpc('submit_evidence',{'p_team_id':team_id,'p_member_id':member_id,'p_challenge_id':challenge_id,'p_attachments':attachments,'p_text':text})
+
+
+def remove_proof_files(paths:list[str]) -> None:
+    try:_client().storage.from_(get_settings().proof_bucket).remove(paths)
+    except Exception:log.warning('Could not clean up unsubmitted proof attachments')
+
+
 def reject_submission(submission_id: str, note: str | None) -> None:
     rpc("reject_submission", {"p_submission_id": submission_id, "p_note": note})
 
 
 def submission(submission_id: str) -> dict[str, Any]:
-    rows = (
-        _select("submissions")
-        .select("id,session_id,team_id,status,photo_path,submitted_at")
-        .eq("id", submission_id)
-        .limit(1)
-        .execute()
-        .data
+    rows = _submission_rows(
+        "id,session_id,team_id,status,photo_path,attachments,proof_text,submitted_at",
+        lambda query: query.eq("id", submission_id).limit(1),
     )
     if not rows:
         raise HTTPException(status_code=404, detail="submission not found")
@@ -677,7 +683,7 @@ def public_asset_url(path: str | None) -> str | None:
     )
 
 
-def _upload_object(bucket: str, path: str, data: bytes, content_type: str) -> None:
+def _upload_object(bucket: str, path: str, data: Any, content_type: str) -> None:
     """Upload bytes, retrying a dropped connection.
 
     A burst of phones uploading at once used to kill the connection mid-upload
@@ -687,6 +693,7 @@ def _upload_object(bucket: str, path: str, data: bytes, content_type: str) -> No
     delay = UPLOAD_BACKOFF
     for attempt in range(1, UPLOAD_ATTEMPTS + 1):
         try:
+            if hasattr(data,'seek'):data.seek(0)
             _client().storage.from_(bucket).upload(
                 path, data, {"content-type": content_type, "upsert": "false"}
             )
@@ -727,9 +734,10 @@ def upload_challenge_image(
     return path
 
 
-def upload_proof(session_id: str, team_id: str, filename: str, data: bytes, content_type: str) -> str:
+def upload_proof(session_id: str, team_id: str, filename: str, data: Any, content_type: str) -> str:
     settings = get_settings()
-    safe = f"{uuid.uuid4().hex}{filename[filename.rfind('.'):] if '.' in filename else '.jpg'}"
+    suffix={'image/jpeg':'.jpg','image/png':'.png','image/webp':'.webp','image/gif':'.gif','image/heic':'.heic','image/heif':'.heif','video/mp4':'.mp4','video/webm':'.webm','video/quicktime':'.mov'}.get(content_type,'.bin')
+    safe = f"{uuid.uuid4().hex}{suffix}"
     path = f"{session_id}/{team_id}/{safe}"
     try:
         _upload_object(settings.proof_bucket, path, data, content_type)

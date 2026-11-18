@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import mimetypes
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from app.video import copy_limited,prepare_video,MAX_VIDEO_SOURCE
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile,Request
@@ -15,7 +19,7 @@ from app.realtime import hub
 
 router = APIRouter(prefix="/api", tags=["play"])
 
-ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic"}
+ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif", "video/mp4", "video/webm", "video/quicktime"}
 
 
 @router.post("/join")
@@ -43,45 +47,61 @@ def state(request:Request,member: dict[str, Any] = Depends(current_member)) -> d
 async def submit_proof(
     background: BackgroundTasks,
     challenge_id: str = Form(...),
-    file: UploadFile = File(...),
+    files: list[UploadFile] | None = File(None),
+    file: UploadFile | None = File(None),
+    text: str = Form('',max_length=4000),
     member: dict[str, Any] = Depends(current_member),
 ) -> dict[str, Any]:
-    """Upload photo proof and register the submission."""
-    settings = get_settings()
-
-    content_type = (file.content_type or "").lower()
-    if content_type not in ALLOWED_TYPES:
-        raise HTTPException(
-            status_code=415,
-            detail=f"unsupported image type: {content_type or 'unknown'}",
-        )
-
-    data = await file.read()
-    if not data:
-        raise HTTPException(status_code=400, detail="empty file")
-    if len(data) > settings.max_upload_bytes:
-        raise HTTPException(
-            status_code=413,
-            detail=f"photo is larger than {settings.max_upload_bytes // (1024 * 1024)} MiB",
-        )
-
-    session_id = member["session"]["id"]
-    team_id = member["team"]["id"]
-
-    path = await asyncio.to_thread(
-        repo.upload_proof,
-        session_id,
-        team_id,
-        file.filename or "proof.jpg",
-        data,
-        content_type,
-    )
-    await asyncio.to_thread(
-        repo.submit_proof, team_id, member["id"], challenge_id, path, None
-    )
-
-    background.add_task(hub.broadcast, session_id)
-    return {"ok": True, "photo_path": path}
+    """Validate the complete draft, then upload its media and create one proof."""
+    settings=get_settings()
+    uploads=[*(files or []),*([file] if file else [])]
+    message=text.strip()
+    if not uploads and not message:
+        raise HTTPException(status_code=400,detail='Add an image, a video, or a message before submitting.')
+    if len(uploads)>10:
+        raise HTTPException(status_code=400,detail='Attach at most 10 files per submission.')
+    session_id=member['session']['id'];team_id=member['team']['id']
+    paths=[];attachments=[];registering=False
+    with TemporaryDirectory(prefix='challenge-proof-') as directory:
+        root=Path(directory);prepared=[];total=0
+        for index,item in enumerate(uploads):
+            name=(item.filename or 'attachment').replace('\\','/').split('/')[-1][:255]
+            content_type=(item.content_type or '').lower()
+            if not content_type or content_type=='application/octet-stream':content_type=mimetypes.guess_type(name)[0] or ''
+            if content_type not in ALLOWED_TYPES:raise HTTPException(status_code=415,detail='Attach supported images or MP4, WebM, or MOV videos.')
+            video=content_type.startswith('video/')
+            source=root/f'{index}.source'
+            size=await asyncio.to_thread(copy_limited,item.file,source,MAX_VIDEO_SOURCE if video else settings.max_upload_bytes)
+            total+=size
+            if total>2*1024*1024*1024:raise HTTPException(status_code=413,detail='Attachments must total 2 GiB or less before compression.')
+            prepared.append((name,source,content_type,video))
+        # Validate/prepare every file before anything is uploaded to Storage.
+        processed=[]
+        for index,(name,source,content_type,video) in enumerate(prepared):
+            duration=None
+            if video:
+                output=root/f'{index}.mp4'
+                duration=await asyncio.to_thread(prepare_video,source,output,content_type)
+                source=output;content_type='video/mp4';name=name.rsplit('.',1)[0]+'.mp4'
+            processed.append((name,source,content_type,duration))
+        try:
+            for name,source,content_type,duration in processed:
+                with source.open('rb') as stream:
+                    path=await asyncio.to_thread(repo.upload_proof,session_id,team_id,name,stream,content_type)
+                paths.append(path)
+                attachment={'path':path,'name':name,'content_type':content_type,'size':source.stat().st_size}
+                if duration is not None:attachment['duration_seconds']=duration
+                attachments.append(attachment)
+            registering=True
+            submission_id=await asyncio.to_thread(repo.submit_evidence,team_id,member['id'],challenge_id,attachments,message)
+        except Exception as error:
+            # An uncertain database response may already have committed. Keep
+            # its media rather than deleting files referenced by a valid proof.
+            if paths and (not registering or isinstance(error,HTTPException) and error.status_code<500):
+                await asyncio.to_thread(repo.remove_proof_files,paths)
+            raise
+    background.add_task(hub.broadcast,session_id)
+    return {'ok':True,'submission_id':submission_id,'photo_path':paths[0] if paths else None}
 
 
 @router.get("/clues")

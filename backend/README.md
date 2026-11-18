@@ -1,5 +1,8 @@
 # Backend - API + Supabase Database
 
+For multi-image/video/text proof submission, compressed upload copies, and
+migration 26 deployment requirements, see [Submission evidence](../docs/submission-evidence.md).
+
 FastAPI service plus the **Postgres/Supabase data layer** for the scavenger
 hunt. The database folder (`supabase/`) is the heart of the project: the
 sniping and clue-unlock mechanics are enforced in Postgres so they stay

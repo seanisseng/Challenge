@@ -15,6 +15,8 @@ import type { ClueOutcome } from "../components/ClueNotifications";
 import { createClueCursor, readClueUpdates } from "../lib/clueNotifications";
 import {createShrinkCursor,readShrinkUpdate} from '../lib/shrinkNotifications';
 import type {ShrinkNotice} from '../lib/shrinkNotifications';
+import {draftError} from '../lib/submissionDraft';
+import type {SubmissionDraft} from '../lib/submissionDraft';
 
 import {
   TierBadge,
@@ -55,6 +57,11 @@ export default function TeamDashboard({ initialState, onLeave,freshJoin=false }:
   const [error, setError] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<"board" | "clues" | "teams" | "map">("board");
   const sharing=useLocationSharing(state.session.id,state.session.status==="active");
+  const [mapPromptRequest,setMapPromptRequest]=useState(0);
+  const openMap=()=>{
+    if(mobileTab!=='map'&&sharing.status==='off')setMapPromptRequest(value=>value+1);
+    setMobileTab('map');
+  };
   useEffect(()=>{if(sharing.status==='off')setState(current=>current.map?{...current,map:{...current.map,can_track_teams:false,locations:current.map.locations.filter(point=>point.team_id===current.team.id)}}:current);},[sharing.status]);
   const revealVersion = useRef(initialState.session.board_reveal_version);
   const notificationCursor = useRef(createClueCursor(initialState));
@@ -144,16 +151,17 @@ export default function TeamDashboard({ initialState, onLeave,freshJoin=false }:
     return counts;
   }, [state.clue_awards, state.progress, state.team.id, cluesByTier]);
 
-  const upload = async (challengeId: string, file: File | undefined) => {
-    if (!file) return;
+  const upload = async (challengeId: string, draft:SubmissionDraft):Promise<boolean> => {
+    const problem=draftError(draft);if(problem){setError(problem);return false;}
     setBusyId(challengeId);
     setError(null);
     try {
-      await submitProof(challengeId, file);
-      const fresh = await fetchTeamState();
-      applySnapshot(fresh);
+      await submitProof(challengeId, draft);
+      try{applySnapshot(await fetchTeamState());}catch{setError('Submission sent. Refresh the game to see its status.');}
+      return true;
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "upload failed");
+      return false;
     } finally {
       setBusyId(null);
     }
@@ -184,7 +192,7 @@ export default function TeamDashboard({ initialState, onLeave,freshJoin=false }:
             <p className="player-identity">{state.team.name}</p>
           </div>
 
-          <button type="button" className="player-map-shortcut" aria-pressed={mobileTab==='map'} onClick={()=>setMobileTab(mobileTab==='map'?'board':'map')}><MapPinned size={20} aria-hidden="true"/>{mobileTab==='map'?'Back to board':'Map'}</button>
+          <button type="button" className="player-map-shortcut" aria-pressed={mobileTab==='map'} onClick={()=>mobileTab==='map'?setMobileTab('board'):openMap()}><MapPinned size={20} aria-hidden="true"/>{mobileTab==='map'?'Back to board':'Map'}</button>
           <span className="player-live" role="status">
             {status === "live" ? <span className="live-dot" aria-hidden="true" /> : status === "offline" ? <WifiOff size={16} aria-hidden="true" /> : <LoaderCircle size={16} aria-hidden="true" className="race-spinner" />}
             <span>{status === "live" ? "Live" : status === "offline" ? "Offline" : "Connecting"}</span>
@@ -236,7 +244,7 @@ export default function TeamDashboard({ initialState, onLeave,freshJoin=false }:
               busy={busyId !== null}
               error={error}
               reviewNoticeId={outcomes[0]?.id}
-              onUpload={(id, file) => void upload(id, file)}
+              onUpload={upload}
             />
           </div>
 
@@ -291,15 +299,15 @@ export default function TeamDashboard({ initialState, onLeave,freshJoin=false }:
         <button type="button" aria-current={mobileTab === "board" ? "page" : undefined} onClick={() => setMobileTab("board")}><LayoutGrid size={20} aria-hidden="true" />The board</button>
         <button type="button" aria-current={mobileTab === "clues" ? "page" : undefined} onClick={() => setMobileTab("clues")}><Ticket size={20} aria-hidden="true" /><span>Your clues <b className="nav-count">{state.clues.length}</b></span></button>
         <button type="button" aria-current={mobileTab === "teams" ? "page" : undefined} onClick={() => setMobileTab("teams")}><Users size={20} aria-hidden="true" />Teams</button>
-        <button type="button" aria-current={mobileTab==='map'?'page':undefined} onClick={()=>setMobileTab('map')}><MapPinned size={20} aria-hidden="true"/>Map</button>
+        <button type="button" aria-current={mobileTab==='map'?'page':undefined} onClick={openMap}><MapPinned size={20} aria-hidden="true"/>Map</button>
       </nav>
       <ClueNotifications outcome={outcomes[0]} announcements={announcements} onDismissOutcome={dismissOutcome}
         onDismissAnnouncement={dismissAnnouncement} onView={viewReward} />
       <LocationSharingPrompt key={`${state.session.id}:${state.team.id}`} sessionId={state.session.id} teamId={state.team.id} freshJoin={freshJoin}
-        eligible={state.session.status==='active'&&Boolean(state.map?.configured)} deferred={Boolean(shrinkNotice)||helpOpen||nameOpen||Boolean(outcomes[0])} onShare={()=>{setMobileTab('map');sharing.start();}}/>
+        requestId={mapPromptRequest} eligible={state.session.status==='active'&&Boolean(state.map?.configured)&&sharing.status==='off'} deferred={Boolean(shrinkNotice)||helpOpen||nameOpen||Boolean(outcomes[0])} onShare={()=>{setMobileTab('map');sharing.start();}}/>
       {shrinkNotice&&!helpOpen&&!nameOpen&&!outcomes[0]?<RaceDialog title="The playing area has shrunk" eyebrow="PLAYING AREA UPDATE" onClose={()=>setShrinkNotice(null)} footer={<>
         <button type="button" className="btn-secondary" onClick={()=>setShrinkNotice(null)}>Got it</button>
-        <button type="button" className="btn-primary" onClick={()=>{setShrinkNotice(null);setMobileTab('map');}}>View map</button>
+        <button type="button" className="btn-primary" onClick={()=>{setShrinkNotice(null);openMap();}}>View map</button>
       </>}>
         <p>Area {shrinkNotice.stage} is now active, with a {shrinkNotice.radius_m/1000} km radius.</p>
         <p>The final location is within the playing area. Open the map to check the updated area.</p>
