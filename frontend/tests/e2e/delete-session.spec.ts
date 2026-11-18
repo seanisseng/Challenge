@@ -50,3 +50,14 @@ test("session picker deletion preserves the session on error and allows retry", 
   await expect(page.getByRole("button", { name: "Delete session Game 2", exact: true })).toHaveCount(0);
   expect(requests).toBe(2);
 });
+
+test('deletion explains when Storage cleanup is pending automatic retry',async({page})=>{
+ await installBoardFixture(page);
+ await page.route('**/api/admin/sessions/design-session',route=>route.fulfill({json:{ok:true,media_cleanup_pending:true}}));
+ await page.goto('/admin');await page.getByRole('button',{name:'Delete session',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'Delete Game 2?',exact:true});
+ await expect(dialog).toContainText('Uploaded images and videos');
+ await dialog.getByRole('button',{name:'Delete permanently',exact:true}).click();
+ await expect(page.getByText('Session deleted. Storage cleanup is pending and will retry automatically.',{exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Sessions',exact:true})).toBeVisible();
+});

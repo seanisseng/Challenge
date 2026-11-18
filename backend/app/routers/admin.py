@@ -21,6 +21,7 @@ from app.models import (
     SessionCreateRequest,
 )
 from app.realtime import hub
+from app.map_runtime import map_runtime
 
 public_router = APIRouter(prefix="/api/admin", tags=["admin"])
 router = APIRouter(
@@ -71,9 +72,10 @@ def session_state(session_id: str) -> dict[str, Any]:
 
 @router.delete("/sessions/{session_id}")
 def delete_session(session_id: str, background: BackgroundTasks) -> dict[str, Any]:
-    repo.delete_session(session_id)
+    pending=repo.delete_session(session_id)
     background.add_task(hub.close_room, session_id)
-    return {"ok": True}
+    background.add_task(map_runtime.cancel, session_id)
+    return {"ok": True,**({'media_cleanup_pending':True} if pending else {})}
 
 
 @router.post("/sessions/{session_id}/start")

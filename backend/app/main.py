@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.map_runtime import map_runtime
 from app.realtime import hub
+from app.media_cleanup import media_cleanup
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
@@ -23,8 +24,10 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     await map_runtime.start()
     await hub.start()
+    await media_cleanup.start()
     try:yield
     finally:
+        await media_cleanup.close()
         await hub.close()
         await map_runtime.close()
 

@@ -48,6 +48,7 @@ export default function AdminConsole({ onSignOut }: Props) {
   const [tab, setTab] = useState<Tab>("board");
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [deletionNotice,setDeletionNotice]=useState<string|null>(null);
   const [loading, setLoading] = useState(false);
   const [retrying, setRetrying] = useState(false);
 
@@ -122,7 +123,8 @@ export default function AdminConsole({ onSignOut }: Props) {
     setSelectedSubmissionId(null);
   };
 
-  const sessionDeleted = (id: string) => {
+  const sessionDeleted = (id: string,mediaPending=false) => {
+    setDeletionNotice(mediaPending?'Session deleted. Storage cleanup is pending and will retry automatically.':'Session and its uploaded media deleted.');
     setSessions(current => current.filter(entry => entry.id !== id));
     if (sessionId === id) {
       setAdminSession(null);
@@ -150,7 +152,7 @@ export default function AdminConsole({ onSignOut }: Props) {
 
   if (!sessionId || !state) {
     return (
-      <SessionPicker
+      <>{deletionNotice?<p className="connection-notice" role="status">{deletionNotice}</p>:null}<SessionPicker
         sessions={sessions}
         loading={loading}
         error={error}
@@ -162,7 +164,7 @@ export default function AdminConsole({ onSignOut }: Props) {
         onError={(message) => setError(message)}
         onDeleted={sessionDeleted}
         onSignOut={onSignOut}
-      />
+      /></>
     );
   }
 
@@ -213,6 +215,7 @@ export default function AdminConsole({ onSignOut }: Props) {
         </div>
       </header>
       <main className="race-main">
+        {deletionNotice?<p className="connection-notice" role="status">{deletionNotice}</p>:null}
         <ConnectionNotice status={status} error={error} retrying={retrying} onRetry={retryBoard} />
 
         {tab === "review" ? (
@@ -288,7 +291,7 @@ function SessionPicker({
   onCreated: (id: string) => void;
   onError: (message: string) => void;
   onSignOut: () => void;
-  onDeleted: (id: string) => void;
+  onDeleted: (id: string,mediaPending?:boolean) => void;
 }) {
   const [name, setName] = useState("");
   const [teamCount, setTeamCount] = useState(4);

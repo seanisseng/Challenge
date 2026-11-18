@@ -244,7 +244,7 @@ export function fetchAdminState(sessionId: string): Promise<AdminState> {
   return request<AdminState>(`/api/admin/sessions/${sessionId}/state`);
 }
 
-export function deleteSession(sessionId: string): Promise<{ ok: boolean }> {
+export function deleteSession(sessionId: string): Promise<{ ok: boolean;media_cleanup_pending?:boolean }> {
   return request(`/api/admin/sessions/${sessionId}`, { method: "DELETE" });
 }
 

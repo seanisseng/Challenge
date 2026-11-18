@@ -50,8 +50,9 @@ one API instance using `python -m app.server` until shared broadcasting is added
 - Claiming another task in an exhausted clue tier can award no new clue. The
   task UI does not yet explain that condition.
 - Shared immediate broadcasting across multiple API instances is not implemented.
-- Attachment retention/storage cleanup is not scheduled; stored videos can fill
-  the project's storage allocation.
+- Deleted sessions now have durable Storage cleanup (see `session-deletion.md`).
+  Age-based retention for games that are kept is still not configured, so their
+  stored videos can fill the project's storage allocation.
 - Public deployment/CI, rate limiting on PIN login and join/upload endpoints,
   and dependency updates still need attention before a public launch.
 

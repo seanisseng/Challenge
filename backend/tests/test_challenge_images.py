@@ -12,6 +12,10 @@ from app.main import app
 
 URL = "/api/admin/sessions/session/challenges/challenge/image"
 
+@pytest.fixture(autouse=True)
+def existing_session(monkeypatch):
+    monkeypatch.setattr(repo,'get_session',lambda session_id:{'id':session_id})
+
 
 @pytest.fixture
 def image_api(monkeypatch):

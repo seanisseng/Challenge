@@ -13,7 +13,7 @@ from app.main import app
 def deletion(monkeypatch):
     monkeypatch.setenv("ADMIN_PIN", "delete-tests")
     get_settings.cache_clear()
-    delete = Mock()
+    delete = Mock(return_value=False)
     close = AsyncMock()
     monkeypatch.setattr(repo, "delete_session", delete, raising=False)
     monkeypatch.setattr(realtime.hub, "close_room", close, raising=False)
@@ -46,27 +46,26 @@ def test_missing_session_does_not_disconnect_players(deletion):
 
 
 def test_repository_delete_is_scoped_to_session_id(monkeypatch):
-    query = Mock()
-    query.delete.return_value = query
-    query.eq.return_value = query
-    query.execute.return_value.data = [{"id": "selected-session"}]
-    select = Mock(return_value=query)
-    monkeypatch.setattr(repo, "_select", select)
-    repo.delete_session("selected-session")
-    select.assert_called_once_with("game_sessions")
-    query.delete.assert_called_once_with()
-    query.eq.assert_called_once_with("id", "selected-session")
+    session='00000000-0000-0000-0000-000000000001'
+    action=Mock();cleanup=Mock(return_value=False)
+    monkeypatch.setattr(repo,'rpc',action);monkeypatch.setattr(repo,'_cleanup_session_media',cleanup)
+    assert repo.delete_session(session) is False
+    assert action.call_args.args[0]=='delete_session_with_media'
+    assert action.call_args.args[1]['p_session_id']==session
+    cleanup.assert_called_once_with(session)
 
 
 def test_repository_returns_404_when_nothing_deleted(monkeypatch):
-    query = Mock()
-    query.delete.return_value = query
-    query.eq.return_value = query
-    query.execute.return_value.data = []
-    monkeypatch.setattr(repo, "_select", lambda table: query)
+    monkeypatch.setattr(repo,'rpc',Mock(side_effect=HTTPException(404,'session not found')))
     with pytest.raises(HTTPException) as error:
-        repo.delete_session("missing")
+        repo.delete_session('00000000-0000-0000-0000-000000000002')
     assert error.value.status_code == 404
+
+def test_pending_storage_cleanup_is_reported_and_players_are_disconnected(deletion):
+    client,headers,delete,close=deletion;delete.return_value=True
+    response=client.delete('/api/admin/sessions/selected-session',headers=headers)
+    assert response.json()=={'ok':True,'media_cleanup_pending':True}
+    close.assert_awaited_once_with('selected-session')
 
 
 @pytest.mark.asyncio

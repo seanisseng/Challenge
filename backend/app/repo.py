@@ -8,8 +8,10 @@ the caller's team is always resolved from a member token first.
 from __future__ import annotations
 
 import logging
+import hashlib
 import time
 import uuid
+from threading import RLock
 from urllib.parse import quote
 from datetime import datetime, timezone
 from typing import Any
@@ -23,6 +25,10 @@ from app.config import get_settings
 from app.db.supabase_client import get_admin_client
 
 log = logging.getLogger(__name__)
+_media_locks: dict[str,RLock] = {}
+
+def _media_lock(session_id: str):
+    return _media_locks.setdefault(session_id,RLock())
 
 # Postgres sqlstate for "deadlock detected". The whole transaction was rolled
 # back, so replaying the call is always safe.
@@ -76,7 +82,7 @@ def _clean_message(message: str) -> str:
 def _to_http(exc: APIError) -> HTTPException:
     message = getattr(exc, "message", None) or str(exc)
     code = getattr(exc, "code", None)
-    status = 409 if code in {"23505", "PT409"} else 400
+    status = 404 if code=='PT404' else 409 if code in {"23505", "PT409"} else 400
     return HTTPException(status_code=status, detail=_clean_message(message))
 
 
@@ -172,14 +178,82 @@ def get_session(session_id: str) -> dict[str, Any]:
     return rows[0]
 
 
-def delete_session(session_id: str) -> None:
-    """Delete one session; foreign keys cascade its game records."""
-    try:
-        rows = _select("game_sessions").delete().eq("id", session_id).execute().data
-    except APIError as exc:
-        raise _to_http(exc) from exc
-    if not rows:
-        raise HTTPException(status_code=404, detail="session not found")
+def delete_session(session_id: str) -> bool:
+    """Atomically queue media cleanup and cascade game records; return pending."""
+    try:session_id=str(uuid.UUID(session_id))
+    except ValueError as exc:raise HTTPException(400,'Invalid session ID.') from exc
+    settings=get_settings()
+    # Remove the session first so newly queued uploads fail their existence
+    # check while any already-running Storage transfer finishes under the lock.
+    rpc('delete_session_with_media',{'p_session_id':session_id,'p_buckets':list(dict.fromkeys([settings.proof_bucket,settings.asset_bucket]))},retry=True)
+    with _media_lock(session_id):
+        try:return _cleanup_session_media(session_id)
+        except Exception:
+            log.warning('Session deleted; durable Storage cleanup will retry')
+            return True
+
+
+def _storage_session_paths(bucket,session_id: str) -> list[str]:
+    """List the entire exact session prefix before deleting any paged results."""
+    root=str(uuid.UUID(session_id));folders=[root];paths=[]
+    while folders:
+        folder=folders.pop();offset=0
+        while True:
+            entries=bucket.list(folder,{'limit':100,'offset':offset,'sortBy':{'column':'name','order':'asc'}})
+            for item in entries:
+                name=item['name']
+                if not name or name in ('.','..') or '/' in name or '\\' in name:raise ValueError('Invalid Storage object name')
+                path=f'{folder}/{name}'
+                if not path.startswith(root+'/'):raise ValueError('Storage path left session prefix')
+                if item.get('id') is None and item.get('metadata') is None:folders.append(path)
+                else:paths.append(path)
+            if len(entries)<100:break
+            offset+=len(entries)
+    return paths
+
+
+def _cleanup_session_media(session_id: str) -> bool:
+    with _media_lock(session_id):
+        jobs=_select('session_media_deletions').select('*').eq('session_id',session_id).limit(1).execute().data
+        if not jobs:return False
+        job=jobs[0]
+        try:
+            _select('session_media_deletions').update({'attempts':job['attempts']+1,'last_attempt_at':datetime.now(timezone.utc).isoformat()}).eq('session_id',session_id).execute()
+            for name in job['buckets']:
+                bucket=_client().storage.from_(name)
+                paths=_storage_session_paths(bucket,session_id)
+                if name==get_settings().asset_bucket:
+                    _preserve_shared_assets(bucket,session_id,paths)
+                for offset in range(0,len(paths),100):bucket.remove(paths[offset:offset+100])
+                if _storage_session_paths(bucket,session_id):raise RuntimeError('Session media remains in Storage')
+            _select('session_media_deletions').delete().eq('session_id',session_id).execute()
+            return False
+        except Exception as exc:
+            log.warning('Session Storage cleanup pending (%s)',type(exc).__name__)
+            try:_select('session_media_deletions').update({'last_error':type(exc).__name__}).eq('session_id',session_id).execute()
+            except Exception:pass
+            return True
+
+
+def _preserve_shared_assets(bucket,session_id: str,paths: list[str]) -> None:
+    shared=set()
+    for table in ('challenge_templates','challenges'):
+        rows=_select(table).select('image_path').like('image_path',session_id+'/%').execute().data
+        shared.update(row['image_path'] for row in rows)
+    urls={row['media_url'] for row in _select('clues').select('media_url').not_.is_('media_url','null').execute().data}
+    shared.update(path for path in paths if public_asset_url(path) in urls)
+    for path in sorted(shared.intersection(paths)):
+        extension=path.rsplit('.',1)[-1].lower()
+        if not extension.isalnum() or len(extension)>10:extension='bin'
+        destination=f'_shared/{hashlib.sha256(path.encode()).hexdigest()}.{extension}'
+        if not bucket.exists(destination):bucket.copy(path,destination)
+        rpc('relocate_shared_session_asset',{'p_session_id':session_id,'p_old_path':path,'p_new_path':destination,
+            'p_old_url':public_asset_url(path),'p_new_url':public_asset_url(destination)},retry=True)
+
+
+def retry_session_media_deletions() -> None:
+    jobs=(_select('session_media_deletions').select('session_id').order('last_attempt_at',nullsfirst=True).limit(25).execute().data)
+    for job in jobs:_cleanup_session_media(job['session_id'])
 
 
 def set_session_status(session_id: str, status: str) -> None:
@@ -741,7 +815,7 @@ def upload_challenge_image(
     extension = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}[content_type]
     path = f"{session_id}/{uuid.uuid4().hex}{extension}"
     try:
-        _upload_object(get_settings().asset_bucket, path, data, content_type)
+        _upload_session_object(session_id,get_settings().asset_bucket, path, data, content_type)
     except HTTPException:
         raise
     except Exception as exc:
@@ -755,12 +829,20 @@ def upload_proof(session_id: str, team_id: str, filename: str, data: Any, conten
     safe = f"{uuid.uuid4().hex}{suffix}"
     path = f"{session_id}/{team_id}/{safe}"
     try:
-        _upload_object(settings.proof_bucket, path, data, content_type)
+        _upload_session_object(session_id,settings.proof_bucket, path, data, content_type)
     except HTTPException:
         raise
     except Exception as exc:  # storage3 raises its own errors
         raise HTTPException(status_code=400, detail=f"upload failed: {exc}") from exc
     return path
+
+
+def _upload_session_object(session_id: str,bucket: str,path: str,data: Any,content_type: str) -> None:
+    # Serialize physical uploads with deletion. A video finishing encoding after
+    # its session was deleted cannot recreate that session's Storage prefix.
+    with _media_lock(session_id):
+        get_session(session_id)
+        _upload_object(bucket,path,data,content_type)
 
 
 def signed_url(path: str, expires_in: int = 3600) -> str | None:

@@ -57,6 +57,12 @@ class MapRuntime:
             except Exception:
                 log.warning('Location cleanup deferred; map storage unavailable')
 
+    async def cancel(self,session_id):
+        task=self.timers.pop(session_id,None)
+        if task:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):await task
+
     async def close(self):
         tasks=list(self.timers.values())+[t for t in (self.housekeeper,self.bootstrap) if t]
         for task in tasks:task.cancel()

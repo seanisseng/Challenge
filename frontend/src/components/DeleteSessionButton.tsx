@@ -5,7 +5,7 @@ import { RaceDialog } from "./RaceDialog";
 
 export function DeleteSessionButton({ session, onDeleted, compact = false }: {
   session: { id: string; name: string };
-  onDeleted: (id: string) => void;
+  onDeleted: (id: string,mediaPending?:boolean) => void;
   compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -19,9 +19,9 @@ export function DeleteSessionButton({ session, onDeleted, compact = false }: {
     setBusy(true);
     setError(null);
     try {
-      await deleteSession(session.id);
+      const result=await deleteSession(session.id);
       setOpen(false);
-      onDeleted(session.id);
+      onDeleted(session.id,Boolean(result.media_cleanup_pending));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not delete this session. Please try again.");
     } finally {
@@ -40,6 +40,7 @@ export function DeleteSessionButton({ session, onDeleted, compact = false }: {
       <button type="button" className="btn-danger" disabled={busy} onClick={() => void confirm()}>{busy ? "Deleting..." : "Delete permanently"}</button>
     </>}>
       <p>This permanently deletes this session, its teams, challenges, clues, submissions and progress. Connected players will be disconnected.</p>
+      <p>Uploaded images and videos belonging to this session will also be removed from Storage. Failed media cleanup retries automatically.</p>
       <p>This cannot be undone.</p>
       {error ? <p role="alert">{error}</p> : null}
     </RaceDialog> : null}
