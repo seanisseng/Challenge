@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import {
   ApiError,
-  fetchTeamState,
+  fetchTeamBoard,
   getAdminToken,
   getTeamToken,
   setAdminSession,
@@ -53,7 +53,7 @@ function PlayerRoute() {
       controller.abort();
       if(!cancelled){setRestoreFailed(true);setBooting(false);}
     },15_000);
-    fetchTeamState(token,{signal:controller.signal})
+    fetchTeamBoard(token,{signal:controller.signal})
       .then((snapshot) => {
         if (!cancelled&&!controller.signal.aborted) setState(snapshot);
       })
@@ -97,7 +97,7 @@ function PlayerRoute() {
   return (
     <JoinScreen
       onJoined={snapshot=>{
-        try{const key=locationPromptKey(snapshot.session.id,snapshot.team.id);if(!localStorage.getItem(key))localStorage.setItem(key,'pending');}catch{/* The in-memory flag still offers the prompt. */}
+        try{localStorage.setItem(locationPromptKey(snapshot.session.id,snapshot.team.id),'pending');}catch{/* The in-memory flag still offers the prompt. */}
         setFreshJoin(true);setState(snapshot);
       }}
       onAdmin={() => navigate("/admin")}

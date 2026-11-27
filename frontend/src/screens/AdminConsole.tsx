@@ -46,6 +46,8 @@ export default function AdminConsole({ onSignOut }: Props) {
 
   const [sessionId, setSessionId] = useState<string | null>(getAdminSession());
   const [state, setState] = useState<AdminState | null>(null);
+  const gameVersion=useRef(0);
+  const setGameState:typeof setState=value=>{gameVersion.current++;setState(value);};
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [tab, setTab] = useState<Tab>("review");
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
@@ -89,14 +91,14 @@ export default function AdminConsole({ onSignOut }: Props) {
 
   useEffect(() => {
     if (!sessionId) {
-      setState(null);
+      setGameState(null);
       return;
     }
     let cancelled = false;
     setLoading(true);
     fetchAdminState(sessionId)
       .then((snapshot) => {
-        if (!cancelled) setState(snapshot);
+        if (!cancelled) setGameState(snapshot);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -118,10 +120,13 @@ export default function AdminConsole({ onSignOut }: Props) {
   const status = useLiveSocket<AdminState | MapEvent | AdminGameUpdate>(
     sessionId && adminToken ? adminSocketUrl(adminToken, sessionId) : null,
     (snapshot) => {
-      if (snapshot.kind === "admin") setState(current=>({...snapshot,map:current?.session.id===snapshot.session.id?mergeMapSnapshot(current.map,snapshot.map):snapshot.map}));
-      else if(snapshot.kind==='admin_update')setState(current=>current?mergeAdminGameUpdate(current,snapshot):current);
+      if (snapshot.kind === "admin") setGameState(current=>({...snapshot,map:current?.session.id===snapshot.session.id?mergeMapSnapshot(current.map,snapshot.map):snapshot.map}));
+      else if(snapshot.kind==='admin_update')setGameState(current=>current?mergeAdminGameUpdate(current,snapshot):current);
       else setState(current=>current&&snapshot.session_id===current.session.id?{...current,map:applyMapEvent(current.map,snapshot)}:current);
     },
+    onSignOut,
+    signal=>fetchAdminState(sessionId!,{signal}),
+    ()=>gameVersion.current,
   );
 
   const selectSession = (id: string) => {
@@ -138,7 +143,7 @@ export default function AdminConsole({ onSignOut }: Props) {
     if (sessionId === id) {
       setAdminSession(null);
       setSessionId(null);
-      setState(null);
+      setGameState(null);
       setLoading(false);
     }
     setError(null);
@@ -152,7 +157,7 @@ export default function AdminConsole({ onSignOut }: Props) {
   const retryBoard = () => {
     if (!sessionId) return;
     setRetrying(true);
-    void fetchAdminState(sessionId).then(snapshot => { setState(snapshot); setError(null); })
+    void fetchAdminState(sessionId).then(snapshot => { setGameState(snapshot); setError(null); })
       .catch(err => fail(err, "could not reconnect")).finally(() => setRetrying(false));
   };
 
@@ -199,7 +204,7 @@ export default function AdminConsole({ onSignOut }: Props) {
       saved=true;
       // A successful request may arrive before its live queue update.
       const confirmed=await fetchAdminState(session.id);
-      setState(current=>current?.session.id===session.id?confirmed:current);
+      setGameState(current=>current?.session.id===session.id?confirmed:current);
     }catch(err){
       if(!saved)setReviewTarget(null);
       fail(err,fallback);
@@ -275,7 +280,7 @@ export default function AdminConsole({ onSignOut }: Props) {
             error={error}
             onAction={(action) => run(async () => {
               await action();
-              setState(await fetchAdminState(session.id));
+              setGameState(await fetchAdminState(session.id));
             }, "could not update board")}
           />
         ) : null}
@@ -289,7 +294,7 @@ export default function AdminConsole({ onSignOut }: Props) {
           />
         ) : null}
 
-        {tab === 'map' ? <HostMap key={session.id} data={state.map} status={session.status} sessionId={session.id} teamNames={Object.fromEntries(state.progress.map(team=>[team.team_id,team.team_name]))} onReload={async()=>setState(await fetchAdminState(session.id))}/> : null}
+        {tab === 'map' ? <HostMap key={session.id} data={state.map} status={session.status} sessionId={session.id} teamNames={Object.fromEntries(state.progress.map(team=>[team.team_id,team.team_name]))} onReload={async()=>setGameState(await fetchAdminState(session.id))}/> : null}
         {tab === "progress" ? <ProgressTab state={state} /> : null}
       </main>
       <HostSubmissionNotifications key={session.id} submissions={state.submissions} suppressed={tab === "review"} onOpen={id => {

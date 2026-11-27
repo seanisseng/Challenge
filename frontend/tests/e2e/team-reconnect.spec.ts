@@ -12,7 +12,7 @@ function teamState(){
 test('rejoining has a clear accessible mobile-friendly loading screen',async({page},info)=>{
  await page.addInitScript(()=>localStorage.setItem('challenge.team-token','saved-token'));
  let release!:()=>void;const waiting=new Promise<void>(resolve=>{release=resolve;});
- await page.route('**/api/state',async route=>{await waiting;try{await route.fulfill({json:teamState()});}catch{/* Request cancelled during cleanup. */}});
+ await page.route('**/api/state*',async route=>{await waiting;try{await route.fulfill({json:teamState()});}catch{/* Request cancelled during cleanup. */}});
  try{
   await page.goto('/');
   await expect(page.getByRole('heading',{name:'Rejoining your team',exact:true})).toBeVisible();
@@ -28,15 +28,17 @@ test('rejoining has a clear accessible mobile-friendly loading screen',async({pa
 test('a stalled reconnect times out without removing the saved login and can retry',async({page},info)=>{
  await page.clock.install();
  await page.addInitScript(()=>localStorage.setItem('challenge.team-token','saved-token'));
- let stalled=true,release!:()=>void;const waiting=new Promise<void>(resolve=>{release=resolve;});
- await page.route('**/api/state',async route=>{
-  if(stalled)await waiting;
+ let stalled=true,requests=0,release!:()=>void;const waiting=new Promise<void>(resolve=>{release=resolve;});
+ await page.route('**/api/state*',async route=>{
+  if(stalled){requests++;await waiting;}
   try{await route.fulfill({json:teamState()});}catch{/* Timed-out request. */}
  });
  await page.routeWebSocket(/\/ws\?/,ws=>ws.send(JSON.stringify(teamState())));
  try{
   await page.goto('/');
   await expect(page.getByRole('heading',{name:'Rejoining your team',exact:true})).toBeVisible();
+  // Wait for restore effects to start before advancing their timers in WebKit.
+  await expect.poll(()=>requests).toBeGreaterThan(0);
   await page.clock.runFor(8_100);
   await expect(page.getByText('Taking a little longer than usual.',{exact:true})).toBeVisible();
   await page.clock.runFor(7_000);
@@ -57,7 +59,7 @@ test('using another team code ignores a late reconnect response and keeps saved 
  });
  let release!:()=>void;const waiting=new Promise<void>(resolve=>{release=resolve;});
  let finished=false;
- await page.route('**/api/state',async route=>{
+ await page.route('**/api/state*',async route=>{
   await waiting;try{await route.fulfill({json:teamState()});}catch{/* Switched team. */}finally{finished=true;}
  });
  try{

@@ -1,5 +1,6 @@
 import { Check, ChevronRight, Circle, Clock3, LoaderCircle, WifiOff, X } from "lucide-react";
 import type { ChallengeStatus, SubmissionStatus, Tier } from "../lib/types";
+import type {ConnectionStatus} from '../lib/useLive';
 
 export function TierBadge({ tier }: { tier: Tier }) {
   const number = Number(tier.slice(-1));
@@ -27,10 +28,10 @@ export function SubmissionStatusBadge({ status }: { status: SubmissionStatus }) 
   </span>;
 }
 
-export function LivePill({ status }: { status: "connecting" | "live" | "offline" }) {
+export function LivePill({ status }: { status: ConnectionStatus }) {
   return <span className={`connection-indicator connection-indicator--${status}`} role="status">
     {status === "live" ? <span className="live-dot" aria-hidden="true" />
       : status === "offline" ? <WifiOff size={14} aria-hidden="true" /> : <LoaderCircle className="race-spinner" size={14} aria-hidden="true" />}
-    {status === "live" ? "Live connection" : status === "offline" ? "Offline" : "Connecting"}
+    {status === "live" ? "Live connection" : status === "offline" ? "Offline" : status==='reconnecting'?'Reconnecting':status==='syncing'?'Updating':'Connecting'}
   </span>;
 }

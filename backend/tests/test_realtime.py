@@ -173,14 +173,28 @@ async def test_payload_failure_does_not_take_the_room_down(
 
 
 @pytest.mark.asyncio
-async def test_snapshot_failure_disconnects_room_for_recovery(monkeypatch):
+async def test_snapshot_failure_requests_resync_without_dropping_healthy_sockets(monkeypatch):
     def fail(_):raise RuntimeError('database unavailable')
     monkeypatch.setattr(snapshots,'room_data',fail)
     hub=realtime.Hub();socket=StubSocket()
     await hub.register(realtime.Subscriber(ws=socket,session_id='room',kind='admin'))
     await hub.broadcast('room')
-    assert socket.closed
-    assert hub.presence('room')==0
+    assert not socket.closed
+    assert socket.sent==[{'kind':'sync_required'}]
+    assert hub.presence('room')==1
+
+
+@pytest.mark.asyncio
+async def test_game_refresh_failure_requests_resync_and_next_update_recovers(stub_snapshots,monkeypatch):
+    def fail(_):raise RuntimeError('database unavailable')
+    monkeypatch.setattr(snapshots,'game_data',fail)
+    hub=realtime.Hub();socket=StubSocket()
+    await hub.register(realtime.Subscriber(ws=socket,session_id='room',kind='admin'))
+    await hub.broadcast_game('room')
+    assert socket.sent==[{'kind':'sync_required'}]
+    assert not socket.closed
+    await hub.broadcast('room')
+    assert socket.sent[-1]=={'kind':'admin','session':'room'}
 
 
 @pytest.mark.asyncio

@@ -13,11 +13,10 @@ export function PlayerTeamCode({code}:{code?:string|null}){
   try{await navigator.clipboard.writeText(code);setNotice('copied');}
   catch{setNotice('unavailable');}
  };
- return <div className="player-team-code-bar"><div className="player-team-code-inner">
-  <span>TEAM CODE</span>
+ return <div className="player-team-code">
   <button type="button" onClick={()=>void copy()} aria-label={`Copy team code ${code}`}>
-   <strong>{code}</strong>{notice==='copied'?<Check size={16} aria-hidden="true"/>:<Copy size={16} aria-hidden="true"/>}
+   <span className="player-team-code-label"><span>TEAM CODE </span><strong>{code}</strong></span>{notice==='copied'?<Check size={16} aria-hidden="true"/>:<Copy size={16} aria-hidden="true"/>}
   </button>
-  <p role="status" aria-live="polite">{notice==='copied'?'Team code copied':notice==='unavailable'?'Select code to copy':'Tap to copy'}</p>
- </div></div>;
+  <p className="sr-only" role="status" aria-live="polite">{notice==='copied'?'Team code copied':notice==='unavailable'?'Select code to copy':''}</p>
+ </div>;
 }

@@ -1,5 +1,6 @@
 import { Ticket } from "lucide-react";
 import type { TeamProgress, Tier } from "../lib/types";
+import {clueValue, leadingTeam} from '../lib/clueRanking';
 import { TeamLabelSticker, TierSticker, type StickerTier } from "./TierSticker";
 
 export type TierCounts = Record<Tier, number>;
@@ -10,9 +11,7 @@ export function TeamProgressCards({ rows, counts, ownTeamId, codes, finishedTeam
   rows: TeamProgress[]; counts: Record<string, TierCounts>; ownTeamId?: string;
   codes?: Record<string, string>; finishedTeamIds?: string[]; host?: boolean;
 }) {
-  const top = Math.max(0, ...rows.map(row => row.clue_count));
-  const leader = top > 0 && rows.filter(row => row.clue_count === top).length === 1
-    ? rows.find(row => row.clue_count === top)?.team_id : undefined;
+  const leader = leadingTeam(rows, counts);
   return <ul className={`team-sticker-cards${host ? " team-sticker-cards--host" : ""}`}>
     {rows.map(row => {
       const earned = counts[row.team_id] ?? emptyTierCounts();
@@ -30,6 +29,7 @@ export function TeamProgressCards({ rows, counts, ownTeamId, codes, finishedTeam
           aria-label={completeBreakdown ? "Tier collection" : `Full tier breakdown unavailable. Known awards: Tier 1, ${earned.tier1}; Tier 2, ${earned.tier2}; Tier 3, ${earned.tier3}. Empty slots may have unreported awards.`}>
           {tiers.map(tier => <TierSticker key={tier} tier={tier} count={earned[`tier${tier}`]} state={earned[`tier${tier}`] > 0 ? "earned" : "empty"} size={host ? "md" : "sm"} />)}
         </div><div className="team-card-total" aria-label={`${row.clue_count} total clues`}><strong>{row.clue_count}</strong><span>CLUES</span></div></div>
+        {completeBreakdown ? <p className="team-card-data-note">Clue value: <strong>{clueValue(row, counts)}</strong></p> : null}
         {!completeBreakdown ? <p className="team-card-data-note">Full tier breakdown unavailable</p> : null}
       </li>;
     })}

@@ -78,6 +78,29 @@ def _board_with_my_status(
     return board
 
 
+def _session_info(session: dict[str, Any]) -> dict[str, Any]:
+    return {key:session[key] for key in ('id','name','room_code','status','team_count','active_task_limit')} | {
+        'board_visible':session.get('board_visible',False),
+        'board_reveal_version':session.get('board_reveal_version',0),
+    }
+
+
+def team_board_payload(member: dict[str, Any]) -> dict[str, Any]:
+    """Restore the playable board without waiting for clues, scores or the map."""
+    session_id=member['session']['id'];team=member['team']
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        session_read=pool.submit(repo.get_session,session_id)
+        board_read=pool.submit(repo.active_challenges,session_id)
+        proofs_read=pool.submit(repo.team_submissions,team['id'])
+        session=session_read.result();board=board_read.result();proofs=proofs_read.result()
+    visible=session.get('board_visible',False) and session['status']=='active'
+    return {'kind':'team','session':_session_info(session),
+            'me':{'id':member['id'],'name':member['name']},
+            'team':{'id':team['id'],'name':team['name'],'join_code':team.get('join_code')},
+            'board':_board_with_my_status([_render_challenge(c) for c in board] if visible else [],proofs),
+            'my_submissions':proofs,'clues':[],'progress':[],'loading_details':True}
+
+
 def _core(
     session: dict[str, Any],
     board: list[dict[str, Any]],
@@ -86,16 +109,7 @@ def _core(
     locations: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return {
-        "session": {
-            "id": session["id"],
-            "name": session["name"],
-            "room_code": session["room_code"],
-            "status": session["status"],
-            "team_count": session["team_count"],
-            "active_task_limit": session["active_task_limit"],
-            "board_visible": session.get("board_visible", False),
-            "board_reveal_version": session.get("board_reveal_version", 0),
-        },
+        "session": _session_info(session),
         "board": board,
         "progress": progress,
         "clue_awards": awards,

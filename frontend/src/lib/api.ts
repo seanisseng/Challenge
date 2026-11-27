@@ -162,7 +162,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 // player
 // --------------------------------------------------------------------------
 export async function joinTeam(code: string): Promise<TeamState> {
-  const result = await request<{ token: string; state: TeamState }>("/api/join", {
+  const result = await request<{ token: string; state: TeamState }>("/api/join?view=board", {
     method: "POST",
     body: { code: code.trim() },
     teamToken: null,
@@ -174,6 +174,10 @@ export async function joinTeam(code: string): Promise<TeamState> {
 
 export function fetchTeamState(token?: string,options:{signal?:AbortSignal}={}): Promise<TeamState> {
   return request<TeamState>("/api/state", { teamToken: token,signal:options.signal });
+}
+
+export function fetchTeamBoard(token?:string,options:{signal?:AbortSignal}={}):Promise<TeamState>{
+  return request<TeamState>('/api/state?view=board',{teamToken:token,signal:options.signal});
 }
 
 export function fetchClues(): Promise<Clue[]> {
@@ -254,8 +258,8 @@ export function createSession(input: {
   });
 }
 
-export function fetchAdminState(sessionId: string): Promise<AdminState> {
-  return request<AdminState>(`/api/admin/sessions/${sessionId}/state`);
+export function fetchAdminState(sessionId: string,options:{signal?:AbortSignal}={}): Promise<AdminState> {
+  return request<AdminState>(`/api/admin/sessions/${sessionId}/state`,{signal:options.signal});
 }
 
 export function deleteSession(sessionId: string): Promise<{ ok: boolean;media_cleanup_pending?:boolean }> {

@@ -31,7 +31,7 @@ function state() {
 test("temporary startup failure preserves the saved player login and retries", async ({page}) => {
   let failing=true;
   await page.addInitScript(()=>localStorage.setItem("challenge.team-token","saved-player-token"));
-  await page.route(/\/api\/state$/,route=>failing ? route.fulfill({status:503,json:{detail:"temporarily unavailable"}}) : route.fulfill({json:state()}));
+  await page.route(/\/api\/state(?:\?.*)?$/,route=>failing ? route.fulfill({status:503,json:{detail:"temporarily unavailable"}}) : route.fulfill({json:state()}));
   await page.routeWebSocket(/\/ws\?/,ws=>ws.send(JSON.stringify(state())));
   await page.goto("/");
   await expect(page.getByRole("button",{name:"Try again",exact:true})).toBeVisible();
@@ -43,7 +43,7 @@ test("temporary startup failure preserves the saved player login and retries", a
 
 test("a confirmed invalid saved token returns to join without recovery by name", async ({page}) => {
   await page.addInitScript(()=>localStorage.setItem("challenge.team-token","invalid-player-token"));
-  await page.route(/\/api\/state$/,route=>route.fulfill({status:401,json:{detail:"invalid or missing team token"}}));
+  await page.route(/\/api\/state(?:\?.*)?$/,route=>route.fulfill({status:401,json:{detail:"invalid or missing team token"}}));
   await page.goto("/");
   await expect(page.getByRole("heading",{name:"Join your team",exact:true})).toBeVisible();
   expect(await page.evaluate(()=>localStorage.getItem("challenge.team-token"))).toBeNull();

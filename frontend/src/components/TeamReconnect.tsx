@@ -28,7 +28,7 @@ export function TeamReconnect({failed,onRetry,onUseCode,onAdmin}:{
       {failed?<WifiOff size={24} aria-hidden="true"/>:<LoaderCircle size={24} className="reconnect-spinner" aria-hidden="true"/>}
       <div role={failed?'alert':'status'} aria-live="polite" aria-atomic="true">
        <strong>{failed?'We couldn’t reconnect.':slow?'Taking a little longer than usual.':'Connecting to your game…'}</strong>
-       <p>{failed?'Your saved login and drafts are still on this device. Check your connection, then try again.':slow?'We’re still trying. Check your connection; a retry option will appear shortly.':'Loading your team’s latest board, clues and submissions.'}</p>
+       <p>{failed?'Your saved login and drafts are still on this device. Check your connection, then try again.':slow?'We’re still trying. Check your connection; a retry option will appear shortly.':'Loading your team’s board so you can get straight back to the hunt.'}</p>
       </div>
      </div>
      {!failed?<div className="reconnect-track" aria-hidden="true"><span/></div>:null}

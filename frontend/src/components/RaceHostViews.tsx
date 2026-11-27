@@ -7,6 +7,7 @@ import { SubmissionEvidenceView } from "./SubmissionEvidenceView";
 import {RaceDialog} from './RaceDialog';
 import { SubmissionStatusBadge, TierBadge } from "./Badges";
 import {pendingReviewQueue} from '../lib/reviewQueue';
+import {clueValue, rankTeams} from '../lib/clueRanking';
 
 function PageHeading({ eyebrow, title, children }: { eyebrow: string; title: string; children: React.ReactNode }) {
   return <div className="race-page-heading"><p className="race-eyebrow"><Route size={14} aria-hidden="true" />{eyebrow}</p><h2>{title}</h2><p>{children}</p></div>;
@@ -107,7 +108,6 @@ export function CluesTab({ sessionId, onError }: { sessionId: string; onError: (
 
 export function ProgressTab({ state }: { state: AdminState }) {
   const [table, setTable] = useState(false);
-  const rows = [...state.progress].sort((a, b) => b.clue_count - a.clue_count || a.team_name.localeCompare(b.team_name));
   const counts: Record<string, TierCounts> = {};
   // Legacy fallback only; current snapshots provide complete inventory counts.
   for (const challenge of [...state.board, ...state.queue]) {
@@ -115,14 +115,15 @@ export function ProgressTab({ state }: { state: AdminState }) {
       (counts[challenge.claimed_by_team_id] ??= emptyTierCounts())[challenge.clue_tier]++;
     }
   }
-  for (const row of rows) {
+  for (const row of state.progress) {
     if (row.clue_tier_counts) counts[row.team_id] = row.clue_tier_counts;
   }
+  const rows = rankTeams(state.progress, counts);
   const codes = Object.fromEntries(state.teams.map(team => [team.id, team.join_code]));
-  return <section className="race-progress"><PageHeading eyebrow="RACE CONTROL / THE FIELD" title="Follow the field.">Every clue adds to the collection. See what each team has earned.</PageHeading>
+  return <section className="race-progress"><PageHeading eyebrow="RACE CONTROL / THE FIELD" title="Follow the field.">Leading is based on clue value: Tier 1 = 1, Tier 2 = 2, Tier 3 = 3.</PageHeading>
     <div className="host-view-summary"><span><b>{String(rows.length).padStart(2, "0")}</b> teams racing</span><span><b>{String(rows.reduce((sum, row) => sum + row.claimed_count, 0)).padStart(2, "0")}</b> challenges secured</span>
       <button className="btn-secondary progress-view-toggle" type="button" aria-pressed={table} onClick={() => setTable(value => !value)}>Table view</button></div>
-    {!rows.length ? <NoTeams /> : table ? <div className="team-progress-table-wrap"><table className="team-progress-table"><caption className="sr-only">Team progress details</caption><thead><tr><th scope="col">Team</th><th scope="col">Join code</th><th scope="col">Clues</th><th scope="col">Challenges secured</th></tr></thead><tbody>{rows.map(row => <tr key={row.team_id}><th scope="row">{row.team_name}</th><td><code>{codes[row.team_id]}</code></td><td>{row.clue_count}</td><td>{row.claimed_count}</td></tr>)}</tbody></table></div>
+    {!rows.length ? <NoTeams /> : table ? <div className="team-progress-table-wrap"><table className="team-progress-table"><caption className="sr-only">Team progress details</caption><thead><tr><th scope="col">Team</th><th scope="col">Join code</th><th scope="col">Clues</th><th scope="col">Clue value</th><th scope="col">Challenges secured</th></tr></thead><tbody>{rows.map(row => <tr key={row.team_id}><th scope="row">{row.team_name}</th><td><code>{codes[row.team_id]}</code></td><td>{row.clue_count}</td><td>{clueValue(row, counts) ?? 'Unavailable'}</td><td>{row.claimed_count}</td></tr>)}</tbody></table></div>
       : <TeamProgressCards rows={rows} counts={counts} codes={codes} host />}
   </section>;
 }

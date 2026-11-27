@@ -33,7 +33,7 @@ test('saved zones can shrink in the lobby before the countdown starts',async({pa
 });
 async function install(page:any,denied=false,fresh=false) {
  const host=fixtureState();
- const state:any={kind:'team',session:host.session,team:{id:'team-0',name:'Team 1'},me:{id:'pool',name:'unused'},board:host.board,progress:host.progress,clues:[],my_submissions:[],clue_awards:[],map:publicMap()};
+ const state:any={kind:'team',session:host.session,team:{id:'team-0',name:'Team 1',join_code:'TEAM01'},me:{id:'pool',name:'unused'},board:host.board,progress:host.progress,clues:[],my_submissions:[],clue_awards:[],map:publicMap()};
  let socket:WebSocketRoute|undefined;const calls:string[]=[];let revision=1;const hidden=new Set<string>();
  await page.addInitScript(({denied,fresh}:any)=>{
   if(!fresh)localStorage.setItem('challenge.team-token','map-fixture');
@@ -73,28 +73,18 @@ async function openMap(page:any,project:string,dismissPrompt=true) {
  if(dismissPrompt&&await prompt.isVisible())await prompt.getByRole('button',{name:'Not now',exact:true}).click();
 }
 
-test('opening the map prompts non-sharing players again, but never starts GPS without consent',async({page},info)=>{
+test('opening the map does not prompt; location controls appear above the map',async({page},info)=>{
  const fixture=await install(page);await page.goto('/');
- const back=()=>info.project.name==='desktop'?page.getByRole('button',{name:'Back to board',exact:true}).click():page.getByRole('navigation',{name:'Game views'}).getByRole('button',{name:'The board',exact:true}).click();
  const prompt=page.getByRole('dialog',{name:'See your team on the map'});
  await expect(prompt).toHaveCount(0);
- await openMap(page,info.project.name,false);await expect(prompt).toBeVisible();
- await expect(prompt).toContainText('If you decline or stop sharing, their trackers stay hidden.');
- expect(fixture.calls).toEqual([]);expect(await page.evaluate(()=>(window as any).__gpsRequests)).toBe(0);
- await prompt.getByRole('button',{name:'Not now',exact:true}).click();
- await expect(prompt).toHaveCount(0);
- fixture.push();await expect(prompt).toHaveCount(0);
- await back();
- await openMap(page,info.project.name,false);await expect(prompt).toBeVisible();
- await prompt.getByRole('button',{name:'Share location',exact:true}).click();
- await expect(page.getByRole('button',{name:'Stop sharing',exact:true})).toBeVisible();
- expect(fixture.calls).toEqual(['start','fix']);
- await back();
  await openMap(page,info.project.name,false);await expect(prompt).toHaveCount(0);
- await page.getByRole('button',{name:'Stop sharing',exact:true}).click();
+ expect(fixture.calls).toEqual([]);expect(await page.evaluate(()=>(window as any).__gpsRequests)).toBe(0);
+ const controls=page.locator('.map-location-controls');
+ await controls.getByRole('button',{name:'Share my location',exact:true}).click();
+ await expect(controls.getByRole('button',{name:'Stop sharing',exact:true})).toBeVisible();
+ expect(fixture.calls).toEqual(['start','fix']);
+ await controls.getByRole('button',{name:'Stop sharing',exact:true}).click();
  await expect(prompt).toHaveCount(0);
- await back();
- await openMap(page,info.project.name,false);await expect(prompt).toBeVisible();
 });
 
 test('hidden teams disappear from player maps and delayed pre-hide fixes stay hidden',async({page},info)=>{
@@ -188,12 +178,69 @@ test('a lobby join keeps the prompt pending until the configured game starts',as
  await expect(page.getByRole('dialog',{name:'See your team on the map'})).toBeVisible();expect(fixture.calls).toEqual([]);
 });
 
-test('accepting the join prompt opens the map and starts sharing only after consent',async({page})=>{
+test('accepting the join prompt keeps the board open and provides phone-friendly controls at the top of Map',async({page},info)=>{
  const fixture=await install(page,false,true);await page.goto('/');
  await page.getByLabel('Team code',{exact:true}).fill('TEAM01');await page.getByRole('button',{name:'Join / rejoin team',exact:true}).click();
  await page.getByRole('dialog',{name:'See your team on the map'}).getByRole('button',{name:'Share location',exact:true}).click();
- await expect(page.getByRole('region',{name:'Playing area map'})).toBeVisible();
- await expect(page.getByRole('button',{name:'Stop sharing',exact:true})).toBeVisible();expect(fixture.calls).toEqual(['start','fix']);
+ await expect(page.getByRole('region',{name:'Playing area map'})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:/Going Bananas/})).toBeVisible();
+ await expect(page.locator('.player-header').getByRole('button',{name:'Stop sharing',exact:true})).toHaveCount(0);
+ await openMap(page,info.project.name);
+ const controls=page.locator('.map-location-controls');
+ const stop=controls.getByRole('button',{name:'Stop sharing',exact:true});
+ await expect(stop).toBeVisible();expect(fixture.calls).toEqual(['start','fix']);
+ for (const width of [375,320]) {
+  await page.setViewportSize({width,height:667});
+  const box=(await stop.boundingBox())!;
+  expect(box.y+box.height).toBeLessThanOrEqual((await page.getByRole('region',{name:'Playing area map'}).boundingBox())!.y);expect(box.height).toBeGreaterThanOrEqual(44);
+  expect(box.x+box.width).toBeLessThanOrEqual(width);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ }
+ await page.setViewportSize({width:390,height:844});
+ expect((await new AxeBuilder({page}).include('.map-location-controls').analyze()).violations).toEqual([]);
+ await page.screenshot({path:`artifacts/location-map-controls-${info.project.name}.png`});
+ await stop.click();
+ await expect(controls.getByRole('button',{name:'Share my location',exact:true})).toBeVisible();
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ expect(fixture.calls).toEqual(['start','fix','stop']);
+});
+
+test('a code rejoin offers sharing from the board once background map details arrive',async({page})=>{
+ const fixture=await install(page,false,true);
+ await page.addInitScript(()=>localStorage.setItem('challenge.location-prompt:design-session:team-0','done'));
+ const board={...fixture.state,loading_details:true};delete board.map;
+ let release!:()=>void;const waiting=new Promise<void>(resolve=>{release=resolve;});
+ await page.route('**/api/join*',route=>route.fulfill({json:{token:'map-fixture',state:board}}));
+ await page.route('**/api/state*',async route=>{await waiting;await route.fulfill({json:fixture.state});});
+ await page.routeWebSocket(/\/ws\?/,()=>{});
+ try {
+  await page.goto('/');
+  await page.getByLabel('Team code',{exact:true}).fill('TEAM01');await page.getByRole('button',{name:'Join / rejoin team',exact:true}).click();
+  const prompt=page.getByRole('dialog',{name:'See your team on the map'});
+  await expect(page.getByRole('button',{name:/Going Bananas/})).toBeVisible();
+  await expect(prompt).toHaveCount(0);
+  await expect(page.locator('.player-header').getByRole('button',{name:'Share my location',exact:true})).toHaveCount(0);
+  release();await expect(prompt).toBeVisible();
+  await prompt.getByRole('button',{name:'Not now',exact:true}).click();
+  await expect(page.getByRole('region',{name:'Playing area map'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:/Going Bananas/})).toBeVisible();
+  expect(fixture.calls).toEqual([]);expect(await page.evaluate(()=>(window as any).__gpsRequests)).toBe(0);
+ } finally {release();}
+});
+
+test('the map control can cancel a pending location request before GPS responds',async({page},info)=>{
+ const fixture=await install(page);
+ await page.goto('/');
+ await page.evaluate(()=>{
+  navigator.geolocation.getCurrentPosition=(ok:any)=>{(window as any).__lateFix=ok;};
+ });
+ await openMap(page,info.project.name);
+ const controls=page.locator('.map-location-controls');
+ await controls.getByRole('button',{name:'Share my location',exact:true}).click();
+ await controls.getByRole('button',{name:'Stop locating',exact:true}).click();
+ await page.evaluate(()=>(window as any).__lateFix({coords:{latitude:1.3,longitude:103.9,accuracy:12}}));
+ await expect(controls.getByRole('button',{name:'Share my location',exact:true})).toBeVisible();
+ expect(fixture.calls).toEqual([]);
 });
 
 test('multiple devices on one team render one tracker and one roster entry',async({page},info)=>{

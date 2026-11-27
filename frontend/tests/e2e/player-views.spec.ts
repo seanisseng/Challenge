@@ -31,7 +31,49 @@ async function playerFixture(page: Page, count = 6) {
   return { state, uploads, push: () => socket?.send(JSON.stringify(state)),pushEvent:(event:unknown)=>socket?.send(JSON.stringify(event)) };
 }
 
-test('players see their team code at the top of the header and can copy it',async({page},info)=>{
+test('player leading banner and ordering use weighted clues and update live',async({page})=>{
+ const fixture=await playerFixture(page);
+ fixture.state.progress=fixture.state.progress.slice(0,2).map((row,index)=>({...row,clue_count:3,
+  clue_tier_counts:index===0?{tier1:1,tier2:1,tier3:1}:{tier1:0,tier2:2,tier3:1}}));
+ const clue=fixture.state.clues[0];
+ fixture.state.clues=(['tier1','tier2','tier3'] as const).map(tier=>({...clue,id:tier,tier}));
+ await page.goto('/');
+ if ((page.viewportSize()?.width ?? 1440) < 1024) await page.getByRole('button',{name:'Teams',exact:true}).click();
+ const cards=page.locator('.team-sticker-card');
+ await expect(cards.first()).toContainText('Team 2');
+ await expect(cards.first()).toContainText('LEADING');
+ await expect(cards.first()).toContainText('Clue value: 7');
+ await expect(cards.first().getByLabel('3 total clues')).toBeVisible();
+ fixture.state.clues.push({...clue,id:'extra',tier:'tier3'});
+ fixture.state.progress[0]={...fixture.state.progress[0],clue_count:4,clue_tier_counts:{tier1:1,tier2:1,tier3:2}};
+ fixture.push();
+ await expect(cards.first()).toContainText('Team 1');
+ await expect(cards.first()).toContainText('LEADING');
+ await expect(cards.first()).toContainText('Clue value: 9');
+});
+
+test('host cards and table use weighted clue totals and ties have no sole leader',async({page})=>{
+ const fixture=await installBoardFixture(page);
+ fixture.state.progress=fixture.state.progress.slice(0,2).map((row,index)=>({...row,clue_count:3,
+  clue_tier_counts:index===0?{tier1:1,tier2:1,tier3:1}:{tier1:0,tier2:2,tier3:1}}));
+ await page.goto('/admin');
+ await page.getByRole('button',{name:'Progress',exact:true}).click();
+ const cards=page.locator('.team-sticker-card');
+ await expect(cards.first()).toContainText('Team 2');
+ await expect(cards.first()).toContainText('LEADING');
+ await page.getByRole('button',{name:'Table view',exact:true}).click();
+ const first=page.locator('.team-progress-table tbody tr').first();
+ await expect(first).toContainText('Team 2');
+ await expect(first.locator('td').nth(1)).toHaveText('3');
+ await expect(first.locator('td').nth(2)).toHaveText('7');
+ fixture.state.progress[0].clue_tier_counts={tier1:0,tier2:2,tier3:1};
+ fixture.push();
+ await page.getByRole('button',{name:'Table view',exact:true}).click();
+ await expect(cards.first()).toContainText('Team 1');
+ await expect(page.getByText('LEADING',{exact:true})).toHaveCount(0);
+});
+
+test('one player header shows game, team code and menu above the team name and can copy the code',async({page},info)=>{
  const fixture=await playerFixture(page);
  await page.addInitScript(()=>{
   Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async(value:string)=>{(window as unknown as {copiedCode:string}).copiedCode=value;}}});
@@ -39,7 +81,22 @@ test('players see their team code at the top of the header and can copy it',asyn
  await page.goto('/');
  const copy=page.getByRole('button',{name:'Copy team code TEAM01',exact:true});
  await expect(copy).toBeVisible();
- await expect(page.locator('.player-team-code-bar')).toContainText('TEAM01');
+ await expect(page.locator('.player-team-code')).toContainText('TEAM01');
+ await expect(page.locator('.player-team-code-bar')).toHaveCount(0);
+ await expect(page.locator('.player-header')).toHaveCount(1);
+ for(const width of [375,320]){
+  await page.setViewportSize({width,height:667});
+  const game=(await page.locator('.player-header h1').boundingBox())!;
+  const code=(await copy.boundingBox())!;
+  const menu=(await page.getByLabel('Game menu').boundingBox())!;
+  const team=(await page.locator('.player-identity').boundingBox())!;
+  expect(game.x+game.width).toBeLessThanOrEqual(code.x);
+  expect(code.x+code.width).toBeLessThanOrEqual(menu.x);
+  expect(Math.abs(game.y+game.height/2-code.y-code.height/2)).toBeLessThan(4);
+  expect(team.y).toBeGreaterThanOrEqual(code.y+code.height);
+  expect((await page.locator('.player-header').boundingBox())!.height).toBeLessThanOrEqual(80);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ }
  expect((await copy.boundingBox())!.y).toBeLessThan((await page.locator('.player-identity').boundingBox())!.y);
  await copy.click();
  await expect.poll(()=>page.evaluate(()=>(window as unknown as {copiedCode:string}).copiedCode)).toBe('TEAM01');
@@ -381,9 +438,10 @@ test("safe areas and toolbar resizing preserve contained scrolling", async ({ pa
   test.skip(!["phone", "iphone-webkit"].includes(info.project.name), "Mobile safe-area sizing");
   await playerFixture(page);
   await page.goto("/");
+  const headerHeight=(await page.locator(".player-header").boundingBox())!.height;
   await page.addStyleTag({ content: ".race-player { --player-safe-top: 47px; --player-safe-bottom: 34px; }" });
   await expect(page.locator(".challenge-card")).toHaveCount(6);
-  expect((await page.locator(".player-header").boundingBox())!.height).toBe(147);
+  expect((await page.locator(".player-header").boundingBox())!.height).toBe(headerHeight+47);
   expect((await page.locator(".player-mobile-nav").boundingBox())!.height).toBe(90);
   const list = page.locator(".challenge-list");
   expect(await list.evaluate(el => el.scrollHeight <= el.clientHeight + 1)).toBe(true);

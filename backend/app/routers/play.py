@@ -7,7 +7,7 @@ import mimetypes
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from app.video import copy_limited,prepare_video
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile,Request
 
@@ -25,7 +25,7 @@ MAX_SUBMISSION_BYTES = 4 * 1024 * 1024
 
 
 @router.post("/join")
-def join(payload: JoinRequest) -> dict[str, Any]:
+def join(payload: JoinRequest,view:Literal['full','board']='full') -> dict[str, Any]:
     """Join or rejoin shared team access using only the team code."""
     joined = repo.join_team(payload.code)
     token = str(joined["member_token"])
@@ -34,12 +34,13 @@ def join(payload: JoinRequest) -> dict[str, Any]:
     if member is None:
         raise HTTPException(status_code=500, detail="joined but could not load team")
 
-    return {"token": token, "state": snapshots.team_payload(member)}
+    return {"token": token, "state": snapshots.team_board_payload(member) if view=='board' else snapshots.team_payload(member)}
 
 
 @router.get("/state")
-def state(request:Request,member: dict[str, Any] = Depends(current_member)) -> dict[str, Any]:
+def state(request:Request,member: dict[str, Any] = Depends(current_member),view:Literal['full','board']='full') -> dict[str, Any]:
     """The full snapshot this device needs to render the game."""
+    if view=='board':return snapshots.team_board_payload(member)
     repo.touch_member(member["id"])
     until=repo.location_access_until(member['team']['id'],request.headers.get('X-Location-Device'),request.headers.get('X-Location-Lease'))
     return snapshots.team_payload(member,location_until=until)

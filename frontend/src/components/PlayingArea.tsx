@@ -20,15 +20,21 @@ export function PlayingArea({data,status,sharing,teamId,teamNames}:{
  const outside=own&&data?.area&&mapDistance(own,data.area)>data.area.radius_m;
  return <section className="playing-area"><div className="map-heading"><MapPin aria-hidden="true"/><div><p className="race-eyebrow">RACE CONTROL / THE PLAYING FIELD</p><h2>Playing area</h2></div></div>
   <div className="map-status-strip"><span>{data?.configured?`Area ${(data.stage_index??0)+1} of ${data.stage_count}`:'Waiting for the host to set the area'}</span></div>
+  <div className="map-location-controls">
+   <button type="button" className="btn-primary" aria-pressed={sharing.status!=='off'} disabled={sharing.status==='off'&&(!data?.configured||status!=='active')}
+    onClick={()=>sharing.status==='off'?sharing.start():void sharing.stop()}>
+    <LocateFixed size={18} aria-hidden="true"/>{sharing.status==='off'?'Share my location':sharing.status==='locating'?'Stop locating':'Stop sharing'}
+   </button>
+   {status!=='active'?<p>Location sharing is available while the game is active.</p>:!data?.configured?<p>Waiting for the host to set the playing area.</p>:null}
+   {sharing.error?<p role="alert">{sharing.error}</p>:null}
+  </div>
   {outside?<p className="map-outside" role="status">You are outside the current playing area. The final location is within the playing area.</p>:null}
   <Suspense fallback={<p role="status">Loading map...</p>}><MapCanvas data={data?{...data,locations:visibleLocations}:undefined} teamNames={teamNames}/></Suspense>
   <div className="map-legend"><span className="map-legend-initial">Starting area</span><span className="map-legend-current">Current area</span><span>The final location is within the playing area.</span></div>
   <section className="map-sharing"><h3><LocateFixed size={18} aria-hidden="true"/>Your device location</h3>
    <p>Share from this device to see your position and other teams inside the game radius. Your team’s devices combine into one tracker. Stale fixes disappear within two minutes.</p>
-   <button type="button" className="btn-primary" disabled={!data?.configured||status!=='active'} onClick={()=>sharing.status==='off'?sharing.start():void sharing.stop()}>
-    {sharing.status==='off'?'Share my location':sharing.status==='locating'?'Stop locating':'Stop sharing'}</button>
+   <p>Use the location button above the map to share or stop sharing.</p>
    {status!=='active'?<p>Location sharing is available while the game is active.</p>:null}
-   {sharing.error?<p role="alert">{sharing.error}</p>:null}
   </section>
   <section className="map-roster"><h3>Shared team locations <span>({trackers.length} team{trackers.length===1?'':'s'})</span></h3>
    {!canTrack?<p>Share your location to see other teams. The game radius and your own team remain visible.</p>:null}

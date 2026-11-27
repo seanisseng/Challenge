@@ -178,7 +178,7 @@ class Hub:
                            else snapshots.team_game_update(sub.team_id,data)) for sub in room]
             except Exception:
                 log.exception('failed to build game update for session %s',session_id)
-                await asyncio.gather(*(self._reconnect(sub) for sub in room))
+                await asyncio.gather(*(self._send(sub,{'kind':'sync_required'}) for sub in room))
                 return
             await asyncio.gather(*(self._send(sub,payload) for sub,payload in payloads))
 
@@ -197,7 +197,9 @@ class Hub:
             data = await asyncio.to_thread(snapshots.room_data, session_id)
         except Exception:
             log.exception("failed to build snapshot for session %s", session_id)
-            await asyncio.gather(*(self._reconnect(sub) for sub in room))
+            # The transport can still answer heartbeats. Ask clients to refresh
+            # instead of disconnecting the entire room over a transient read.
+            await asyncio.gather(*(self._send(sub,{'kind':'sync_required'}) for sub in room))
             return
 
         payloads: list[tuple[Subscriber, dict[str, Any]]] = []

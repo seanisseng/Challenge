@@ -86,6 +86,8 @@ export interface ClueAward {
 }
 
 export interface TeamState {
+  /** Board-only restore; the remaining panels are still loading. */
+  loading_details?: boolean;
   map?: GameMapState;
   kind: "team";
   session: SessionInfo;

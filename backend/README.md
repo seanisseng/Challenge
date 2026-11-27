@@ -215,11 +215,25 @@ Team endpoints take `X-Team-Token`; admin endpoints take `X-Admin-Token`
 | `POST` | `/api/join` | none | Join or rejoin using a team code, returns shared access |
 | `PATCH` | `/api/team` | team | Change own team name and broadcast the update |
 | `GET` | `/api/state` | team | Full player snapshot |
+| `GET` | `/api/state?view=board` | team | Board-first restore with own submission statuses; remaining panels load later |
 | `POST` | `/api/submissions` | team | Upload photo proof (multipart) |
 | `GET` | `/api/clues` | team | Only this team's unlocked clues |
 | `WS` | `/ws?token=...` or `/ws?admin_token=...&session_id=...` | either | Live snapshots |
 
+`POST /api/join?view=board` also returns the lightweight response. Both endpoints
+default to full snapshots for older clients. Board-first loading performs three
+data reads in parallel after authentication (session, active challenges, own
+submissions); it defers the presence write, clue reads, scores and map reads to
+the later full-state request. Visibility and pending-proof protection remain in
+the initial response. No database migration is required.
+
 ## Live updates
+
+Transient room/game snapshot-read failures send `sync_required` instead of
+disconnecting every healthy listener. Clients refresh through authenticated
+HTTP while heartbeats continue, and subsequent pushes recover normally. Dead
+or unresponsive sockets are still removed. Map visibility failures still close
+connections to withhold locations when permission cannot be checked.
 
 `app/realtime.py` keeps one in-process room per session. Every mutation ends
 with `hub.broadcast(session_id)`, which rebuilds the snapshot and pushes a

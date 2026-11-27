@@ -1,13 +1,14 @@
 import { LoaderCircle, RefreshCw, TriangleAlert, WifiOff } from "lucide-react";
+import type {ConnectionStatus} from '../lib/useLive';
 
 export function ConnectionNotice({ status, error, retrying, onRetry, confirmationPending=false }: {
-  status: "connecting" | "live" | "offline";
+  status: ConnectionStatus;
   error: string | null;
   retrying: boolean;
   onRetry: () => void;
   confirmationPending?: boolean;
 }) {
-  const offline = status === "offline" || Boolean(error?.includes("cannot reach the backend"));
+  const offline = status === "offline";
   if (!offline && !error && !confirmationPending) return null;
   const Icon = offline ? WifiOff : TriangleAlert;
   return <div className={`connection-notice ${offline ? "connection-notice--offline" : "connection-notice--error"}`} role="alert">
