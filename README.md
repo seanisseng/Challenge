@@ -74,6 +74,25 @@ npm run dev
 - Player join: <http://localhost:5173/>
 - Host console: <http://localhost:5173/admin>
 
+### Environment variables for a shared deployment domain
+
+Keep `VITE_API_BASE_URL=` in `frontend/.env` and
+`BACKEND_CORS_ORIGINS=` in `backend/.env` blank. The frontend uses the current
+website's origin automatically, so production and preview domains need no URL
+edits. Locally, Vite proxies `/api` and `/ws` to the backend on port 8000.
+
+Import the backend and frontend env files into Vercel's project environment
+settings, retaining the existing Supabase credentials and admin PIN. Import
+`VITE_API_BASE_URL` as Config (or omit it); credentials and the PIN are Secret.
+Remove any existing localhost override in Vercel and redeploy the updated code.
+This requires deployment routing for `/api/*` to the backend. The app also uses
+`/ws` for live updates, which requires a host that supports WebSocket servers;
+environment variables alone do not provide that capability.
+
+For a separately hosted backend, set `VITE_API_BASE_URL` to its public origin
+without `/api` or a trailing slash, and set `BACKEND_CORS_ORIGINS` to the
+frontend's exact origin (comma-separated for multiple origins).
+
 ## How a game runs
 
 1. **Host** opens `/admin`, types the PIN from `backend/.env`, and creates a

@@ -1,8 +1,8 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  /** Base URL of the FastAPI backend, e.g. http://localhost:8000 */
-  readonly VITE_API_BASE_URL: string;
+  /** Leave blank to use this site's origin; optionally override for a separate backend. */
+  readonly VITE_API_BASE_URL?: string;
 }
 
 interface ImportMeta {

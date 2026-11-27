@@ -1,4 +1,5 @@
 import type { MapPoint,MapStage } from "./gameMap";
+import {resolveApiBaseUrl} from './apiBaseUrl';
 import type {SubmissionDraft} from './submissionDraft';
 import type {EvidenceAttachment} from './types';
 /**
@@ -20,7 +21,7 @@ import type {
 } from "./types";
 
 export const API_BASE_URL: string =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+  resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL, window.location.origin);
 
 const TEAM_TOKEN_KEY = "challenge.team-token";
 const ADMIN_TOKEN_KEY = "challenge.admin-token";
