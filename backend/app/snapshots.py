@@ -8,6 +8,7 @@ snapshot to the session room.
 from __future__ import annotations
 
 from typing import Any
+from concurrent.futures import ThreadPoolExecutor
 import time
 
 from app import repo
@@ -145,6 +146,44 @@ def room_data(session_id: str) -> dict[str, Any]:
         "queue": [_render_challenge(c) for c in repo.queued_challenges(session_id)],
         "session_submissions": repo.session_submissions(session_id),
     }
+
+
+def game_data(session_id: str) -> dict[str, Any]:
+    """Only data changed by evidence/reviews; skip maps and member rosters.
+
+    Fetch submission history once for all viewers, and overlap independent
+    reads with a bounded pool instead of paying every network delay in series.
+    """
+    session=repo.get_session(session_id)
+    teams=repo.list_teams(session_id)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        board=pool.submit(repo.active_challenges,session_id)
+        progress=pool.submit(repo.progress,session_id,teams)
+        awards=pool.submit(repo.recent_clue_awards,session_id)
+        submissions=pool.submit(repo.session_submissions,session_id)
+        clues=pool.submit(repo.clues_by_team,[team['id'] for team in teams])
+        queue=pool.submit(repo.queued_challenges,session_id)
+        return {'session':{key:session.get(key,False if key=='board_visible' else 0) for key in
+                           ('id','name','room_code','status','team_count','active_task_limit','board_visible','board_reveal_version')},
+                'board':[_render_challenge(row) for row in board.result()],
+                'progress':progress.result(),'clue_awards':awards.result(),
+                'submissions':submissions.result(),'clues':clues.result(),
+                'queue':[_render_challenge(row) for row in queue.result()]}
+
+
+def team_game_update(team_id: str,data: dict[str,Any]) -> dict[str,Any]:
+    own=[{key:value for key,value in row.items() if key not in ('team_id','session_id','teams','team_members','challenges')}
+         for row in data['submissions'] if row['team_id']==team_id]
+    visible=data['session']['board_visible'] and data['session']['status']=='active'
+    return {'kind':'team_update','session_id':data['session']['id'],'team_id':team_id,
+            'changes':{'session':data['session'],'board':_board_with_my_status(data['board'] if visible else [],own),
+                       'progress':data['progress'],'clue_awards':data['clue_awards'],
+                       'clues':data['clues'].get(team_id,[]),'my_submissions':own}}
+
+
+def admin_game_update(data: dict[str,Any]) -> dict[str,Any]:
+    return {'kind':'admin_update','session_id':data['session']['id'],
+            'changes':{key:data[key] for key in ('session','board','queue','progress','submissions')}}
 
 
 def team_payload(

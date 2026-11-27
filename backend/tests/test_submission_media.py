@@ -35,6 +35,28 @@ def test_text_only_submission_is_valid(evidence):
     assert response.status_code==200;upload.assert_not_called()
     submit.assert_called_once_with('team','member','challenge',[],'Our answer')
 
+@pytest.mark.parametrize('mime,name',[('image/jpeg','photo.jpg'),('video/mp4','clip.mp4')])
+def test_vercel_attachment_budget_rejects_oversized_files_before_processing(evidence,monkeypatch,mime,name):
+    client,upload,submit,_=evidence
+    prepare=Mock();monkeypatch.setattr(play,'prepare_video',prepare)
+    response=client.post('/api/submissions',data={'challenge_id':'challenge'},
+                         files=[('files',(name,b'x'*(4*1024*1024+1),mime))])
+    assert response.status_code==413
+    prepare.assert_not_called();upload.assert_not_called();submit.assert_not_called()
+
+@pytest.mark.parametrize('extra',[0,1])
+def test_vercel_budget_is_combined_across_new_and_legacy_file_fields(evidence,extra):
+    client,upload,submit,_=evidence
+    half=2*1024*1024
+    response=client.post('/api/submissions',data={'challenge_id':'challenge','text':'x'*4000},
+                         files=[('files',('photo.jpg',b'x'*half,'image/jpeg')),
+                                ('file',('clip.mp4',b'x'*(half+extra),'video/mp4'))])
+    assert response.status_code==(413 if extra else 200)
+    if extra:
+        upload.assert_not_called();submit.assert_not_called()
+    else:
+        assert upload.call_count==2;submit.assert_called_once()
+
 def test_pending_submission_is_rejected_before_processing_or_storage(evidence,monkeypatch):
     client,upload,submit,_=evidence
     monkeypatch.setattr(repo,'require_submission_open',Mock(side_effect=HTTPException(409,'Your proof is awaiting host review.')))

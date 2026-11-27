@@ -5,6 +5,19 @@ import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { installBoardFixture } from "./board.fixture";
 
+test('partial review updates remove decided proofs from the pending queue',async({page})=>{
+ const fixture=await installBoardFixture(page);
+ await page.goto('/admin');await expect(page.getByText('Live connection',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:/^Review/}).click();
+ const before=fixture.state.submissions.filter(row=>row.status==='pending').length;
+ fixture.state.submissions=fixture.state.submissions.map(row=>({...row,status:'rejected' as const}));
+ fixture.pushEvent({kind:'admin_update',session_id:fixture.state.session.id,changes:{session:fixture.state.session,
+  board:fixture.state.board,queue:fixture.state.queue,progress:fixture.state.progress,submissions:fixture.state.submissions}});
+ expect(before).toBeGreaterThan(0);
+ await expect(page.getByRole('button',{name:'Approve',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('heading',{name:/^decision log$/i})).toBeVisible();
+});
+
 test('reviewed proof has individual host download links',async({page})=>{
  const fixture=await installBoardFixture(page);fixture.state.submissions[0].status='approved';
  await page.route('**/api/admin/submissions/*/photo',route=>route.fulfill({json:{url:'/reference.jpg',text:'Previous message',attachments:[

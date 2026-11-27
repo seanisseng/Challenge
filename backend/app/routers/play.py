@@ -6,7 +6,7 @@ import asyncio
 import mimetypes
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from app.video import copy_limited,prepare_video,MAX_VIDEO_SOURCE
+from app.video import copy_limited,prepare_video
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile,Request
@@ -20,6 +20,8 @@ from app.realtime import hub
 router = APIRouter(prefix="/api", tags=["play"])
 
 ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif", "video/mp4", "video/webm", "video/quicktime"}
+# Leave room for message and multipart headers under Vercel's 4.5 MB limit.
+MAX_SUBMISSION_BYTES = 4 * 1024 * 1024
 
 
 @router.post("/join")
@@ -73,9 +75,15 @@ async def submit_proof(
             if content_type not in ALLOWED_TYPES:raise HTTPException(status_code=415,detail='Attach supported images or MP4, WebM, or MOV videos.')
             video=content_type.startswith('video/')
             source=root/f'{index}.source'
-            size=await asyncio.to_thread(copy_limited,item.file,source,MAX_VIDEO_SOURCE if video else settings.max_upload_bytes)
+            remaining=MAX_SUBMISSION_BYTES-total
+            limit=remaining if video else min(remaining,settings.max_upload_bytes)
+            try:
+                size=await asyncio.to_thread(copy_limited,item.file,source,limit)
+            except HTTPException as error:
+                if error.status_code==413:
+                    raise HTTPException(413,'Attachments must total 4 MiB or less. Resize images or trim/compress videos before submitting.') from error
+                raise
             total+=size
-            if total>2*1024*1024*1024:raise HTTPException(status_code=413,detail='Attachments must total 2 GiB or less before compression.')
             prepared.append((name,source,content_type,video))
         # Validate/prepare every file before anything is uploaded to Storage.
         processed=[]
@@ -105,7 +113,7 @@ async def submit_proof(
             if paths and (not registering or isinstance(error,HTTPException) and error.status_code<500):
                 await asyncio.to_thread(repo.remove_proof_files,paths)
             raise
-    background.add_task(hub.broadcast,session_id)
+    background.add_task(hub.broadcast_game,session_id)
     return {'ok':True,'submission_id':submission_id,'photo_path':paths[0] if paths else None}
 
 

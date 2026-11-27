@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PointerEvent } from "react";
 import { MapPin, MapPinned, X } from "lucide-react";
 import { TierBadge } from "./Badges";
@@ -30,6 +30,7 @@ export function ChallengeSheet({ challenge, busy, error, trigger, onClose, onUpl
   const edgeStart = useRef<{ x: number; y: number } | null>(null);
   const submission = challenge.my_submission;
   const pending=submission?.status==='pending';
+  const [preparing,setPreparing]=useState(false);
 
   useEffect(() => {
     const element = dialog.current;
@@ -97,12 +98,12 @@ export function ChallengeSheet({ challenge, busy, error, trigger, onClose, onUpl
           : `Rejected${submission.review_note ? `: ${submission.review_note}` : ". You can try again."}`}
       </p> : null}
       {error ? <p role="alert" className="sheet-error">{error}</p> : null}
-      {!pending?<SubmissionComposer draft={draft} onChange={onDraftChange} disabled={busy||draftLoading||challenge.status==='claimed'}/>:null}
+      {!pending?<SubmissionComposer draft={draft} onChange={onDraftChange} onPreparingChange={setPreparing} disabled={busy||draftLoading||challenge.status==='claimed'}/>:null}
       {!pending&&draftStatus?<p className="proof-limits" role={draftStorageError?'alert':'status'}>{draftStatus}</p>:null}
     </div>
     <div className="sheet-actions">
       <div className="proof-submit-actions">
-      <button type="button" className="btn-primary min-h-12" disabled={busy || draftLoading || pending || challenge.status === "claimed"||Boolean(draftError(draft))}
+      <button type="button" className="btn-primary min-h-12" disabled={preparing || busy || draftLoading || pending || challenge.status === "claimed"||Boolean(draftError(draft))}
         onClick={()=>void onUpload(draft)}>
         {pending?'Awaiting host review':busy?'Sending…':'Submit'}
       </button></div>

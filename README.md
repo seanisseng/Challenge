@@ -95,6 +95,12 @@ frontend's exact origin (comma-separated for multiple origins).
 
 ### Vercel project setup
 
+Before deploying the optimized submission/review code, apply
+[`20260101000030_review_submission_result.sql`](backend/supabase/migrations/20260101000030_review_submission_result.sql)
+through the Supabase SQL Editor. Deploy frontend and backend together and reload
+open clients. See [submission evidence](docs/submission-evidence.md#submission-and-review-latency-changes)
+for upload limits, compression, concurrency and verification details.
+
 The root `vercel.json` defines a Vite `frontend` and a FastAPI `backend` in one
 project. Set Vercel's Root Directory to the repository root (not `frontend`),
 use the Other project framework preset, and clear project-wide build/install/

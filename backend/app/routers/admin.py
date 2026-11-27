@@ -191,9 +191,8 @@ def list_clues(session_id: str) -> list[dict[str, Any]]:
 def approve(
     submission_id: str, payload: ReviewRequest, background: BackgroundTasks
 ) -> dict[str, Any]:
-    submission = repo.submission(submission_id)
-    repo.approve_submission(submission_id, payload.note)
-    background.add_task(hub.broadcast, submission["session_id"])
+    session_id = repo.review_submission(submission_id, 'approved', payload.note)
+    background.add_task(hub.broadcast_game, session_id)
     return {"ok": True}
 
 
@@ -201,9 +200,8 @@ def approve(
 def reject(
     submission_id: str, payload: ReviewRequest, background: BackgroundTasks
 ) -> dict[str, Any]:
-    submission = repo.submission(submission_id)
-    repo.reject_submission(submission_id, payload.note)
-    background.add_task(hub.broadcast, submission["session_id"])
+    session_id = repo.review_submission(submission_id, 'rejected', payload.note)
+    background.add_task(hub.broadcast_game, session_id)
     return {"ok": True}
 
 

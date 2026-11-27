@@ -50,7 +50,7 @@ export function HostMap({sessionId,status,data,onReload,teamNames}:{sessionId:st
    <div className="map-plan-actions">
     {!data?.started_at?<button type="button" className="btn-primary" disabled={busy||dirty||!data?.configured||status!=='active'} onClick={()=>void run(()=>startMapTimer(sessionId))}><Play size={16} aria-hidden="true"/>Start shrink countdown</button>:null}
     {data?.started_at?<button type="button" className="btn-secondary" disabled={busy||dirty||status!=='active'||(finalZone&&!data.paused_at)} onClick={()=>void run(()=>data.paused_at?resumeMapTimer(sessionId):pauseMapTimer(sessionId))}>{data.paused_at?<Play size={16} aria-hidden="true"/>:<Pause size={16} aria-hidden="true"/>}{data.paused_at?'Resume shrink timer':'Pause shrink timer'}</button>:null}
-    <button type="button" className="btn-primary" disabled={busy||dirty||!data?.configured||status!=='active'||data.stage_index>=data.stage_count-1} onClick={()=>void run(()=>shrinkMapArea(sessionId))}><Minimize2 size={16} aria-hidden="true"/>Shrink area</button>
+    <button type="button" className="btn-primary" disabled={busy||dirty||!data?.configured||!['lobby','active'].includes(status)||data.stage_index>=data.stage_count-1} onClick={()=>void run(()=>shrinkMapArea(sessionId))}><Minimize2 size={16} aria-hidden="true"/>Shrink area</button>
     {locked?<button type="button" className="btn-secondary" disabled={busy} onClick={()=>{if(window.confirm('Reset the shrink timer and restore the starting area?'))void run(()=>resetMapTimer(sessionId));}}><RotateCcw size={16} aria-hidden="true"/>Reset shrink timer</button>:null}
    </div>
   </div>

@@ -16,7 +16,7 @@ class AdminLoginResponse(BaseModel):
 
 class SessionCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=80)
-    team_count: int = Field(ge=1, le=40)
+    team_count: int = Field(default=8, ge=1, le=40)
     active_task_limit: int = Field(default=6, ge=1, le=24)
 
 

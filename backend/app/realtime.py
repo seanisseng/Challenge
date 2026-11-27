@@ -167,6 +167,21 @@ class Hub:
         async with self.room_lock(session_id):
             await self._broadcast_room(session_id)
 
+    async def broadcast_game(self, session_id: str) -> None:
+        """Evidence/review updates do not reload or transmit map/roster data."""
+        async with self.room_lock(session_id):
+            room=self._room(session_id)
+            if not room:return
+            try:
+                data=await asyncio.to_thread(snapshots.game_data,session_id)
+                payloads=[(sub,snapshots.admin_game_update(data) if sub.kind=='admin'
+                           else snapshots.team_game_update(sub.team_id,data)) for sub in room]
+            except Exception:
+                log.exception('failed to build game update for session %s',session_id)
+                await asyncio.gather(*(self._reconnect(sub) for sub in room))
+                return
+            await asyncio.gather(*(self._send(sub,payload) for sub,payload in payloads))
+
     async def _broadcast_room(self, session_id: str) -> None:
         """Rebuild and push a snapshot to everyone watching this session.
 

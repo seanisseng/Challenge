@@ -1,4 +1,6 @@
 import { HostMap } from "../components/HostMap";
+import {mergeAdminGameUpdate} from '../lib/gameUpdates';
+import type {AdminGameUpdate} from '../lib/gameUpdates';
 import { applyMapEvent,mergeMapSnapshot } from "../lib/gameMap";
 import type { MapEvent } from "../lib/gameMap";
 import "../game-map.css";
@@ -107,10 +109,11 @@ export default function AdminConsole({ onSignOut }: Props) {
     };
   }, [sessionId, fail]);
 
-  const status = useLiveSocket<AdminState | MapEvent>(
+  const status = useLiveSocket<AdminState | MapEvent | AdminGameUpdate>(
     sessionId && adminToken ? adminSocketUrl(adminToken, sessionId) : null,
     (snapshot) => {
       if (snapshot.kind === "admin") setState(current=>({...snapshot,map:current?.session.id===snapshot.session.id?mergeMapSnapshot(current.map,snapshot.map):snapshot.map}));
+      else if(snapshot.kind==='admin_update')setState(current=>current?mergeAdminGameUpdate(current,snapshot):current);
       else setState(current=>current&&snapshot.session_id===current.session.id?{...current,map:applyMapEvent(current.map,snapshot)}:current);
     },
   );
@@ -294,7 +297,7 @@ function SessionPicker({
   onDeleted: (id: string,mediaPending?:boolean) => void;
 }) {
   const [name, setName] = useState("");
-  const [teamCount, setTeamCount] = useState(4);
+  const [teamCount, setTeamCount] = useState(8);
   const [taskLimit, setTaskLimit] = useState(6);
   const [busy, setBusy] = useState(false);
 

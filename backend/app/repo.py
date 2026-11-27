@@ -23,12 +23,15 @@ from supabase import Client
 
 from app.config import get_settings
 from app.db.supabase_client import get_admin_client
+from app.media_gate import MediaGate
 
 log = logging.getLogger(__name__)
-_media_locks: dict[str,RLock] = {}
+_media_locks: dict[str,MediaGate] = {}
+_media_registry_lock=RLock()
 
 def _media_lock(session_id: str):
-    return _media_locks.setdefault(session_id,RLock())
+    with _media_registry_lock:
+        return _media_locks.setdefault(session_id,MediaGate())
 
 # Postgres sqlstate for "deadlock detected". The whole transaction was rolled
 # back, so replaying the call is always safe.
@@ -634,6 +637,10 @@ def approve_submission(submission_id: str, note: str | None) -> None:
     rpc("approve_submission", {"p_submission_id": submission_id, "p_note": note})
 
 
+def review_submission(submission_id: str, status: str, note: str | None) -> str:
+    return rpc('review_submission',{'p_submission_id':submission_id,'p_status':status,'p_note':note},retry=True)
+
+
 def submit_evidence(team_id:str,member_id:str,challenge_id:str,attachments:list[dict],text:str) -> str:
     return rpc('submit_evidence',{'p_team_id':team_id,'p_member_id':member_id,'p_challenge_id':challenge_id,'p_attachments':attachments,'p_text':text})
 
@@ -838,9 +845,9 @@ def upload_proof(session_id: str, team_id: str, filename: str, data: Any, conten
 
 
 def _upload_session_object(session_id: str,bucket: str,path: str,data: Any,content_type: str) -> None:
-    # Serialize physical uploads with deletion. A video finishing encoding after
-    # its session was deleted cannot recreate that session's Storage prefix.
-    with _media_lock(session_id):
+    # Transfers may overlap; cleanup takes exclusive access and waits for all
+    # active transfers. Queued transfers recheck existence after getting a slot.
+    with _media_lock(session_id).upload():
         get_session(session_id)
         _upload_object(bucket,path,data,content_type)
 

@@ -1,4 +1,6 @@
 import { PlayingArea } from "../components/PlayingArea";
+import {mergeTeamGameUpdate} from '../lib/gameUpdates';
+import type {TeamGameUpdate} from '../lib/gameUpdates';
 import {LocationSharingPrompt} from '../components/LocationSharingPrompt';
 import { useLocationSharing } from "../lib/useLocationSharing";
 import { applyMapEvent,mergeMapSnapshot } from "../lib/gameMap";
@@ -110,10 +112,11 @@ export default function TeamDashboard({ initialState, onLeave,freshJoin=false }:
     setState(current=>({...snapshot,map:current.session.id===snapshot.session.id?mergeMapSnapshot(current.map,snapshot.map):snapshot.map}));
   };
 
-  const status = useLiveSocket<TeamState | MapEvent>(
+  const status = useLiveSocket<TeamState | MapEvent | TeamGameUpdate>(
     token ? teamSocketUrl(token,sharing.access) : null,
     (snapshot) => {
       if (snapshot.kind === "team") applySnapshot(snapshot);
+      else if(snapshot.kind==='team_update')applySnapshot(mergeTeamGameUpdate(state,snapshot));
       else setState(current=> snapshot.session_id===current.session.id && (current.session.status==='active'||snapshot.kind==='location_removed'||snapshot.kind==='map_access') ? {...current,map:applyMapEvent(current.map,snapshot,current.team.id)} : current);
     },
     onLeave,

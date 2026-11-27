@@ -9,6 +9,28 @@ test.beforeEach(async({page})=>{
 const stage0={lat:1.31,lng:103.9,radius_m:5000,after_seconds:0};
 const stage1={lat:1.30,lng:103.9,radius_m:1500,after_seconds:600};
 const publicMap=()=>({configured:true,initial_area:stage0,area:stage0,stage_index:0,stage_count:2,started_at:null,next_shrink_at:null,server_time:new Date().toISOString(),locations:[] as any[]});
+
+test('saved zones can shrink in the lobby before the countdown starts',async({page})=>{
+ const fixture=await installBoardFixture(page);
+ fixture.state.session.status='lobby';
+ fixture.state.map={...publicMap(),plan:{stages:[stage0,stage1]},finish:{lat:1.3,lng:103.9}};
+ let shrinks=0;
+ await page.route('**/api/admin/sessions/*/map/shrink',async route=>{
+  shrinks++;fixture.state.map!.stage_index=1;fixture.state.map!.area=stage1;
+  await route.fulfill({json:{stage_index:1}});fixture.push();
+ });
+ await page.goto('/admin');await page.getByRole('button',{name:'Map',exact:true}).click();
+ const shrink=page.getByRole('button',{name:'Shrink area',exact:true});
+ await expect(shrink).toBeEnabled();
+ await expect(page.getByRole('button',{name:'Start shrink countdown',exact:true})).toBeDisabled();
+ await shrink.click();
+ await expect(page.getByText('Area 2 of 2',{exact:true})).toBeVisible();
+ await expect(shrink).toBeDisabled();
+ expect(shrinks).toBe(1);expect(fixture.state.map!.started_at).toBeNull();
+ await page.reload();await page.getByRole('button',{name:'Map',exact:true}).click();
+ await expect(page.getByText('Area 2 of 2',{exact:true})).toBeVisible();
+ await expect(page.getByRole('spinbutton',{name:'Stage 2 radius (km)',exact:true})).toHaveValue('1.5');
+});
 async function install(page:any,denied=false,fresh=false) {
  const host=fixtureState();
  const state:any={kind:'team',session:host.session,team:{id:'team-0',name:'Team 1'},me:{id:'pool',name:'unused'},board:host.board,progress:host.progress,clues:[],my_submissions:[],clue_awards:[],map:publicMap()};

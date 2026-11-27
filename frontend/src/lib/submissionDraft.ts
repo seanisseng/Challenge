@@ -1,6 +1,8 @@
 export interface SubmissionDraft {files:File[];text:string}
 export const MEDIA_ACCEPT='image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,video/mp4,video/webm,video/quicktime';
-export const MAX_VIDEO_BYTES=1024*1024*1024;
+// Budget all attachments together, leaving room for multipart fields under
+// Vercel's default 4.5 MB request-body limit.
+export const MAX_SUBMISSION_BYTES=4*1024*1024;
 export function mediaType(file:Pick<File,'name'|'type'>):string {
  if(file.type&&file.type!=='application/octet-stream')return file.type;
  const extension=file.name.split('.').pop()?.toLowerCase()??'';
@@ -15,8 +17,8 @@ export function draftError(draft:SubmissionDraft):string|null {
   const type=mediaType(file);
   if(!MEDIA_ACCEPT.split(',').includes(type))return 'Choose supported images or MP4, MOV, or WebM videos.';
   if(!file.size)return `${file.name} is empty.`;
-  if(file.size>(type.startsWith('video/')?MAX_VIDEO_BYTES:25*1024*1024))return `${file.name} is too large. Images: 25 MiB; videos: 1 GiB.`;
+  if(file.size>MAX_SUBMISSION_BYTES)return `${file.name} is too large. Keep all attachments combined within 4 MiB. Resize images or trim/compress videos before attaching.`;
   total+=file.size;
  }
- return total>2*1024*1024*1024?'Attachments must total 2 GiB or less.':null;
+ return total>MAX_SUBMISSION_BYTES?'Attachments must total 4 MiB or less. Remove files, resize images, or trim/compress videos before attaching.':null;
 }

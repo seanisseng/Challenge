@@ -21,8 +21,47 @@ async function playerFixture(page: Page, count = 6) {
   });
   await page.route("**/reference.jpg", route => route.fulfill({ status: 404 }));
   await page.routeWebSocket(/\/ws\?/, ws => { socket = ws; ws.send(JSON.stringify(state)); });
-  return { state, uploads, push: () => socket?.send(JSON.stringify(state)) };
+  return { state, uploads, push: () => socket?.send(JSON.stringify(state)),pushEvent:(event:unknown)=>socket?.send(JSON.stringify(event)) };
 }
+
+test('large photos are compressed before attaching and submission',async({page})=>{
+ const fixture=await playerFixture(page);
+ await page.goto('/');
+ await page.getByRole('button',{name:/Going Bananas/}).click();
+ const encoded=await page.evaluate(()=>{
+  const canvas=document.createElement('canvas');canvas.width=2200;canvas.height=2200;
+  const ctx=canvas.getContext('2d')!;const pixels=ctx.createImageData(2200,2200);
+  let seed=12345;
+  for(let i=0;i<pixels.data.length;i+=4){for(let j=0;j<3;j++){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;pixels.data[i+j]=seed&255;}pixels.data[i+3]=255;}
+  ctx.putImageData(pixels,0,0);return canvas.toDataURL('image/png').split(',')[1];
+ });
+ const original=Buffer.from(encoded,'base64');expect(original.length).toBeGreaterThan(4*1024**2);
+ await page.getByLabel('Attach images or videos').setInputFiles({name:'phone.png',mimeType:'image/png',buffer:original});
+ await expect(page.getByText('phone.jpg',{exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Submit',exact:true})).toBeEnabled();
+ const image=page.getByRole('img',{name:'Preview phone.jpg'});
+ await expect(image).toBeVisible();
+ const size=await image.evaluate(async node=>{
+  const img=node as HTMLImageElement;await img.decode();
+  return {bytes:(await(await fetch(img.src)).blob()).size,width:img.naturalWidth,height:img.naturalHeight};
+ });
+ expect(size.bytes).toBeLessThan(original.length);expect(size.bytes).toBeLessThan(4*1024**2);
+ expect(Math.max(size.width,size.height)).toBeLessThanOrEqual(1600);
+ await page.getByRole('button',{name:'Submit',exact:true}).click();
+ await expect.poll(()=>fixture.uploads.length).toBe(1);
+ expect(fixture.uploads[0]).toContain('phone.jpg');
+});
+
+test('partial game updates deliver rewards without replacing the player identity',async({page})=>{
+ const fixture=await playerFixture(page);
+ await page.goto('/');await expect(page.getByText('Live',{exact:true})).toBeVisible();
+ const changes={session:fixture.state.session,board:fixture.state.board,progress:fixture.state.progress,
+  clues:[...fixture.state.clues,{id:'delta-clue',tier:'tier2',title:'Fast reward',body:'Private destination clue',media_url:null,unlocked_at:'2026-11-27T10:00:00Z'}],
+  my_submissions:[],clue_awards:[]};
+ fixture.pushEvent({kind:'team_update',session_id:fixture.state.session.id,team_id:fixture.state.team.id,changes});
+ await expect(page.getByRole('dialog',{name:'Clue unlocked!',exact:true})).toBeVisible();
+ await expect(page.getByRole('dialog',{name:'Clue unlocked!',exact:true}).getByText('Fast reward',{exact:true})).toBeVisible();
+});
 
 test("new clues celebrate once, close early or expire, and survive a closing proof sheet", async ({ page }, info) => {
   await page.clock.install();

@@ -1,6 +1,18 @@
 # Submission evidence
 
-Players can attach up to ten images/videos and an optional message. A nonblank
+Players can attach up to ten images/videos, totaling at most **4 MiB
+(4,194,304 bytes)** per submission, and an optional message. This combined
+source-file budget leaves room for the message and multipart headers below
+Vercel's default 4.5 MB request limit. The browser rejects oversized drafts
+before sending; the API independently enforces the same combined limit before
+processing or uploading any media, including the legacy `file` field.
+Supported photos are resized in the browser before attaching: a JPEG upload
+copy uses a longest edge of at most 1600 pixels and targets 350 KiB. Encoding
+tries lower quality/dimensions when needed and keeps the original if conversion
+fails or would make the file larger. GIFs, videos, files over 25 MiB, and formats
+the browser cannot decode are left unchanged and must still fit the combined
+4 MiB budget. Originals remain untouched. Trim/compress large videos before
+attaching. A nonblank
 message alone is valid. An empty draft cannot be submitted; the API
 and database also enforce this rule.
 
@@ -38,16 +50,19 @@ stored upload copies (including compressed video), not original phone recordings
 
 ## Video copies on Supabase Free
 
-Original MP4/MOV/WebM recordings may be up to 60 seconds and 1 GiB each. The
+Original MP4/MOV/WebM recordings may be up to 60 seconds and must fit within
+the shared 4 MiB submission attachment budget before reaching the server. The
 backend creates a separate H.264/AAC MP4 using bundled FFmpeg from
 `imageio-ffmpeg`. It limits the longest edge to 1920 pixels, frame rate to 30 fps,
 video bitrate to 5 Mbps and audio to 128 kbps. HDR recordings are tone-mapped to
 SDR. The original recording remains unchanged. This reduces upload-copy quality
 in exchange for staying within the Free plan's per-file storage limit.
 
-Prepared videos must fit within 45 MiB. Images are limited to 25 MiB each. Input
-files must total at most 2 GiB per submission; the database limits stored media
-to 450 MiB. Free plan project-wide storage/bandwidth quotas still apply.
+Prepared videos must fit within 45 MiB in Storage. That is an output safety
+cap, not an allowance for larger browser requests: all input images/videos
+combined must fit within 4 MiB. The existing database cap of 450 MiB is a
+Storage constraint, not the public upload limit. Free plan project-wide
+storage/bandwidth quotas still apply.
 
 The API streams source files to temporary disk and streams prepared copies to
 Storage rather than buffering whole videos in memory. At most two encoders run
@@ -57,6 +72,30 @@ original recording upload and encoding (up to five minutes per clip). Multiple
 No background upload service is added.
 
 ## Deployment
+
+### Submission and review latency changes
+
+Apply `backend/supabase/migrations/20260101000030_review_submission_result.sql`
+before deploying the optimized review API. In Supabase's SQL Editor, run that
+file's contents once. It adds the service-role-only `review_submission` RPC,
+which returns the affected session in the same call and delegates claim,
+auto-rejection and clue rewards to the existing transactional functions.
+Same-outcome retries do not issue another reward or decision event. No
+environment-variable changes are required. This migration has not been applied
+to hosted Supabase by this code change.
+
+Submissions and reviews broadcast `team_update` / `admin_update` messages with
+only game fields: board, progress, proof history, queue and private team clues.
+They retain the client's map and roster. Independent database reads overlap in
+a four-thread pool; history is fetched once and sliced by team. Initial
+connections, reconciliation and non-evidence mutations retain full snapshots.
+Reload clients after deploying both frontend and backend together.
+
+Up to four Storage transfers per session can run concurrently within a backend
+process. Cleanup has exclusive access, waits for active transfers, and blocks
+new transfers until it finishes. Every queued transfer rechecks that its
+session still exists. These gates remain process-local; they do not replace
+cross-instance coordination on an autoscaling deployment.
 
 Migration `20260101000026_submission_evidence.sql` adds `attachments` and
 `proof_text`, permits nullable legacy `photo_path`, and installs the service-only
@@ -71,6 +110,16 @@ Install updated `backend/requirements.txt` on the API host. The global Supabase
 Storage limit can stay at the Free-plan default of 50 MB.
 
 ## Verification
+
+The latency changes passed 43 frontend unit tests, TypeScript checking and the
+production build. Mocked backend checks verify one-call reviews, team-private
+partial updates, reduced room reads, four-transfer concurrency and cleanup
+exclusion. Disposable local PostgreSQL checks verify migration application,
+service-only permissions, retry idempotency and competing approvals with one
+reward. Six focused browser checks passed across desktop Chromium and iPhone
+WebKit: real large-photo compression/submission, private clue updates and host
+review updates. These checks do not measure hosted latency or apply migration
+30 to the hosted database.
 
 Coverage includes empty/text-only/mixed drafts, rejected MIME types and counts,
 partial-upload cleanup, host media signing, real FFmpeg encoding including the

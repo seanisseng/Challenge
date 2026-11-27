@@ -1,5 +1,12 @@
 # Backend - API + Supabase Database
 
+New-session forms and API requests default to eight teams. Apply migration
+`20260101000031_saved_session_zones.sql` before deploying lobby shrinking:
+new sessions save their default zones and destination atomically at creation,
+and the host can shrink in the lobby or during an active game without starting
+the countdown. Existing sessions and explicitly supplied plans are preserved.
+The final-zone limit and ended-game restriction still apply.
+
 For multi-image/video/text proof submission, compressed upload copies, and
 migration 26 deployment requirements, see [Submission evidence](../docs/submission-evidence.md).
 

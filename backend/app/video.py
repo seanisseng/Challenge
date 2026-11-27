@@ -7,7 +7,6 @@ from fastapi import HTTPException
 import imageio_ffmpeg
 
 MIB=1024*1024
-MAX_VIDEO_SOURCE=1024*MIB
 MAX_VIDEO_OUTPUT=45*MIB
 ENCODERS=BoundedSemaphore(2)
 

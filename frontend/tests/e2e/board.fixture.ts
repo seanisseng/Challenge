@@ -71,5 +71,5 @@ export async function installBoardFixture(page: Page, options: { empty?: boolean
     if (offline) ws.close({ code: 1001 });
     else if (!options.slow) ws.send(JSON.stringify(state));
   });
-  return { state, mutations, push: () => socket?.send(JSON.stringify(state)), disconnect: () => { offline = true; socket?.close({ code: 1001 }); }, reconnect: () => { offline = false; } };
+  return { state, mutations, push: () => socket?.send(JSON.stringify(state)),pushEvent:(event:unknown)=>socket?.send(JSON.stringify(event)), disconnect: () => { offline = true; socket?.close({ code: 1001 }); }, reconnect: () => { offline = false; } };
 }

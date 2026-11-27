@@ -2,6 +2,26 @@ import AxeBuilder from "@axe-core/playwright";
 import { test, expect } from "@playwright/test";
 import { fixtureState } from "./board.fixture";
 
+test('new sessions default to eight teams',async({page})=>{
+ const host=fixtureState();host.session.team_count=8;
+ const requests:any[]=[];
+ await page.addInitScript(()=>{localStorage.setItem('challenge.admin-token','local-host');localStorage.removeItem('challenge.admin-session');});
+ await page.route(/\/api\//,async route=>{
+  const path=new URL(route.request().url()).pathname;
+  if(route.request().method()==='POST'){
+   requests.push(route.request().postDataJSON());
+   await route.fulfill({json:{session:host.session,teams:host.teams}});
+  }else await route.fulfill({json:path.endsWith('/sessions')?[]:host});
+ });
+ await page.routeWebSocket(/\/ws\?/,socket=>socket.send(JSON.stringify(host)));
+ await page.goto('/admin');
+ await expect(page.getByRole('spinbutton',{name:'Teams',exact:true})).toHaveValue('8');
+ await page.getByRole('textbox',{name:'Hunt name',exact:true}).fill('Eight teams');
+ await page.getByRole('button',{name:'Create session',exact:true}).click();
+ await expect.poll(()=>requests.length).toBe(1);
+ expect(requests[0]).toMatchObject({name:'Eight teams',team_count:8});
+});
+
 function state() {
   const host=fixtureState();
   return { kind:"team",session:host.session,team:{id:"team-0",name:"Team 1"},me:{id:"member",name:"Alice"},board:host.board,progress:host.progress,clues:[],my_submissions:[],clue_awards:[] };
