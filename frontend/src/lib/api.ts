@@ -172,8 +172,8 @@ export async function joinTeam(code: string): Promise<TeamState> {
   return result.state;
 }
 
-export function fetchTeamState(token?: string): Promise<TeamState> {
-  return request<TeamState>("/api/state", { teamToken: token });
+export function fetchTeamState(token?: string,options:{signal?:AbortSignal}={}): Promise<TeamState> {
+  return request<TeamState>("/api/state", { teamToken: token,signal:options.signal });
 }
 
 export function fetchClues(): Promise<Clue[]> {

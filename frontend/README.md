@@ -23,7 +23,7 @@ frontend/
     components/
       Badges.tsx          tier / challenge / submission pills
     screens/
-      JoinScreen.tsx      team code + player name
+      JoinScreen.tsx      shared team-code entry
       TeamDashboard.tsx   live board, clues, rival progress
       AdminLogin.tsx      PIN entry
       AdminConsole.tsx    sessions, codes, review, content, progress
@@ -33,10 +33,18 @@ frontend/
 
 | Route | Screen | What it does |
 |-------|--------|--------------|
-| `/` | Join | Enter a team code and your name; a stored token rejoins silently on reload |
-| `/` | Team dashboard | Live board with photo submission, own clues by tier, rival clue counts |
+| `/` | Join | Enter the shared team code to join or rejoin |
+| `/` | Reconnect | Restore the saved team login with connection feedback, retry, and another-code entry |
+| `/` | Team dashboard | Copyable team code in the header, live board, submissions, own clues and rival progress |
 | `/admin` | PIN login | Exchanges the PIN for the admin token |
 | `/admin` | Console | Create sessions, read out team codes, approve/reject proofs, add clues and challenges, watch progress |
+
+Reconnecting preserves the saved login on temporary failures. Requests time out
+after 15 seconds and can be retried; switching to another team code cancels the
+old request and retains local drafts. A confirmed invalid login returns to code
+entry. The player header receives only the current team's `join_code` from the
+backend; rival team codes remain private. Deploy the frontend and backend
+together for the header code; no database migration is required.
 
 ## Setup
 

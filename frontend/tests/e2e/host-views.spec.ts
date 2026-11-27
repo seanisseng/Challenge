@@ -5,6 +5,89 @@ import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { installBoardFixture } from "./board.fixture";
 
+for(const action of ['approve','reject'] as const){
+ test(`${action} keeps both decision buttons grey until the refreshed snapshot confirms`,async({page})=>{
+  const fixture=await installBoardFixture(page);const proof=fixture.state.submissions[0];
+  fixture.state.submissions.push({...proof,id:'next-proof',teams:{name:'Next team'},submitted_at:'2026-11-27T10:01:00Z'});
+  let respond!:()=>void,confirm!:()=>void;
+  const response=new Promise<void>(resolve=>{respond=resolve;});
+  const confirmation=new Promise<void>(resolve=>{confirm=resolve;});
+  let phase='initial',requests=0;
+  await page.route(`**/api/admin/submissions/${proof.id}/${action}`,async route=>{
+   requests++;phase='saving';await response;
+   proof.status=action==='approve'?'approved':'rejected';
+   phase='confirming';await route.fulfill({json:{ok:true}});
+  });
+  await page.route('**/api/admin/sessions/*/state',async route=>{
+   if(phase==='confirming'){
+    phase='refreshing';await confirmation;
+    const stale=structuredClone(fixture.state);
+    const awaiting=stale.submissions.find(item=>item.id===proof.id)!;
+    awaiting.status='pending';awaiting.teams={name:'Awaiting confirmation team'};
+    await route.fulfill({json:stale});return;
+   }
+   await route.fallback();
+  });
+  try{
+   await page.goto('/admin');
+   await page.getByRole('button',{name:new RegExp(`^${action}`,'i')}).click();
+   const locked=async()=>{
+    for(const name of ['Approve','Reject']){
+     const button=page.getByRole('button',{name:new RegExp(`^${name}`)});
+     await expect(button).toBeDisabled();
+     await expect(button).toHaveCSS('background-color','rgb(226, 232, 240)');
+    }
+   };
+   await expect.poll(()=>phase).toBe('saving');await locked();
+   await page.getByRole('button',{name:'Board',exact:true}).click();
+   await page.getByRole('button',{name:/^Review/}).click();await locked();
+   await expect(page.getByLabel('Note for the team')).toBeDisabled();
+   await expect(page.getByRole('complementary',{name:'Pending submissions'}).getByRole('button').first()).toBeDisabled();
+   await page.keyboard.press('a');await page.keyboard.press('r');expect(requests).toBe(1);
+   respond();await expect.poll(()=>phase).toBe('refreshing');await locked();
+   confirm();
+   await expect(page.getByRole('complementary',{name:'Pending submissions'})).toContainText('Awaiting confirmation team');
+   await locked();
+   fixture.push();
+   await expect(page.getByRole('complementary',{name:'Pending submissions'}).getByRole('button')).toContainText(['Next team']);
+   await expect(page.getByRole('button',{name:/^Approve/})).toBeEnabled();
+   await expect(page.getByRole('button',{name:/^Reject/})).toBeEnabled();
+  }finally{respond();confirm();}
+ });
+}
+
+test('failed review restores decision controls and preserves the note for retry',async({page})=>{
+ await installBoardFixture(page);
+ await page.route('**/api/admin/submissions/*/approve',route=>route.fulfill({status:400,json:{detail:'Review failed. Try again.'}}));
+ await page.goto('/admin');
+ await page.getByLabel('Note for the team').fill('Keep this note');
+ await page.getByRole('button',{name:/^Approve/}).click();
+ await expect(page.getByText('Review failed. Try again.',{exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:/^Approve/})).toBeEnabled();
+ await expect(page.getByRole('button',{name:/^Reject/})).toBeEnabled();
+ await expect(page.getByLabel('Note for the team')).toHaveValue('Keep this note');
+});
+
+test('a saved decision stays locked if confirmation fails and unlocks after refresh',async({page})=>{
+ const fixture=await installBoardFixture(page);const proof=fixture.state.submissions[0];
+ fixture.state.submissions.push({...proof,id:'next-proof',teams:{name:'Next team'},submitted_at:'2026-11-27T10:01:00Z'});
+ let saved=false,failed=false;
+ await page.route('**/api/admin/submissions/*/approve',async route=>{
+  saved=true;proof.status='approved';await route.fulfill({json:{ok:true}});
+ });
+ await page.route('**/api/admin/sessions/*/state',async route=>{
+  if(saved&&!failed){failed=true;await route.fulfill({status:500,json:{detail:'Confirmation temporarily unavailable'}});return;}
+  await route.fallback();
+ });
+ await page.goto('/admin');await page.getByRole('button',{name:/^Approve/}).click();
+ await expect(page.getByText('Confirmation temporarily unavailable',{exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:/^Approve/})).toBeDisabled();
+ await expect(page.getByRole('button',{name:/^Reject/})).toBeDisabled();
+ await page.getByRole('button',{name:'Refresh status',exact:true}).click();
+ await expect(page.getByRole('complementary',{name:'Pending submissions'}).getByRole('button')).toContainText(['Next team']);
+ await expect(page.getByRole('button',{name:/^Approve/})).toBeEnabled();
+});
+
 test('Review opens by default and new requests join the bottom of the oldest-first queue',async({page})=>{
  const fixture=await installBoardFixture(page);const proof=fixture.state.submissions[0];
  fixture.state.submissions=[

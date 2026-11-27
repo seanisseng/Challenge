@@ -24,3 +24,15 @@ def test_repository_join_sends_only_the_team_code(monkeypatch):
     monkeypatch.setattr(repo,'rpc',rpc)
     assert repo.join_team('TEAM01')['member_token']=='shared-token'
     rpc.assert_called_once_with('join_team',{'p_join_code':'TEAM01'})
+
+
+def test_player_snapshot_includes_only_their_own_team_code():
+    member={'id':'member','name':'Player','session':{'id':'room'},
+            'team':{'id':'own','name':'Our team','join_code':'OWN123'}}
+    room={'core':{'session':{'id':'room','status':'active','board_visible':True},
+                  'board':[],'progress':[],'clue_awards':[]},
+          'submissions':{},'clues':{},
+          'teams':[member['team'],{'id':'rival','join_code':'RIVAL1'}]}
+    result=snapshots.team_payload(member,room=room)
+    assert result['team']['join_code']=='OWN123'
+    assert 'RIVAL1' not in str(result)

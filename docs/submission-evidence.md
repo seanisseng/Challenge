@@ -25,6 +25,13 @@ must be trimmed by the player; the app never silently cuts off evidence.
    once. Each transfer uses 6 MiB TUS chunks, with a smaller final chunk. These
    are transport chunks, not separate playable clips: each file stays one video.
 
+Signed TUS uploads use `/storage/v1/upload/resumable/sign` with the per-object
+token in `x-signature`, matching Supabase's signed-upload example. The regular
+`/upload/resumable` route expects user authentication instead. Deploy both the
+backend endpoint correction and frontend status-specific errors together; no
+database migration is needed. Failed drafts remain available for retry. Error
+messages expose HTTP status codes without exposing signed URLs or tokens.
+
 Browser conversion can be slow or fail on memory-limited devices or unsupported
 recordings; retain the draft and provide a clear fallback rather than uploading
 an unverified original. Existing drafts saved before this rollout may need their

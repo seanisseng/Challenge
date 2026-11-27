@@ -1,4 +1,4 @@
-import {Upload} from 'tus-js-client';
+import {Upload,type DetailedError} from 'tus-js-client';
 import type {SubmissionDraft} from './submissionDraft';
 import {mediaType} from './submissionDraft';
 
@@ -58,7 +58,16 @@ export async function uploadProof(challengeId:string,draft:SubmissionDraft,teamT
       chunkSize:6*1024*1024,retryDelays:[0,1000,3000,5000],removeFingerprintOnSuccess:true,
       fingerprint:async()=>`challenge-proof:${ticket.id}`,
       onProgress:bytes=>{transferred[ticket.ordinal]=bytes;progress();},
-      onError:()=>finish(new Error('The Storage upload was interrupted. Retry to resume your saved draft.')),
+      onError:error=>{
+       // DetailedError messages may contain signed URLs. Expose only the status.
+       const status=(error as Partial<DetailedError>).originalResponse?.getStatus()??0;
+       let message='The upload connection failed. Check your connection and retry your saved draft.';
+       if(status===401||status===403)message=`Upload permission was rejected (HTTP ${status}). Your draft is kept. Retry to request fresh upload permission.`;
+       else if(status===413)message='The file exceeds the Storage upload limit (HTTP 413). Your draft is kept. Choose a smaller file.';
+       else if(status===415)message='The file type was rejected (HTTP 415). Your draft is kept. Choose a supported image or MP4 video.';
+       else if(status)message=`Storage could not accept the upload (HTTP ${status}). Your draft is kept. Retry submission.`;
+       finish(new Error(message));
+      },
       onSuccess:()=>finish(),
      });
      const cancel=()=>{void upload.abort().catch(()=>{});finish(abortError());};

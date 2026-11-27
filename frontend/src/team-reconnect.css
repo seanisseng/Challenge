@@ -1,0 +1,31 @@
+.team-reconnect { min-height: 100svh; display: grid; place-items: center; padding: max(28px, env(safe-area-inset-top)) 20px max(28px, env(safe-area-inset-bottom)); color: var(--color-ink); background: var(--color-paper); }
+.reconnect-shell { width: min(100%, 460px); }
+.reconnect-brand { display: flex; justify-content: center; align-items: center; gap: 9px; margin-bottom: 22px; font-size: 11px; letter-spacing: .17em; font-weight: 750; }
+.reconnect-brand svg { color: var(--color-orange-text); }
+.reconnect-ticket { overflow: hidden; border: 1px solid var(--color-line); border-top: 5px solid var(--color-orange); border-radius: 14px; background: var(--color-surface); box-shadow: 0 14px 40px rgb(var(--race-ink) / .07); }
+.reconnect-hero { position: relative; padding: 28px 30px 30px; background: var(--color-ink); color: white; }
+.reconnect-eyebrow { display: inline-block; padding: 6px 9px; border: 1px solid rgb(var(--race-orange) / .55); border-radius: 3px; color: #ffad73; font-size: 10px; font-weight: 750; letter-spacing: .16em; }
+.reconnect-art { position: relative; display: grid; place-items: center; width: 76px; height: 76px; margin: 24px 0 19px; border: 1px solid rgb(255 255 255 / .2); border-radius: 18px; color: var(--color-orange); background: rgb(255 255 255 / .04); transform: rotate(-7deg); }
+.reconnect-art-mark { position: absolute; display: grid; place-items: center; width: 30px; height: 30px; right: -10px; bottom: -5px; border: 3px solid var(--color-ink); border-radius: 50%; background: var(--color-orange); color: var(--color-ink); }
+.reconnect-hero h1 { max-width: 330px; margin: 0; font: 700 clamp(42px, 10vw, 54px)/1 var(--font-display); letter-spacing: -.01em; text-wrap: balance; }
+.reconnect-hero > p { max-width: 330px; margin-top: 14px; color: #d4dbe6; line-height: 1.6; font-size: 15px; }
+.reconnect-body { position: relative; padding: 24px 30px 27px; border-top: 1px dashed #aaa69e; }
+.reconnect-body::before, .reconnect-body::after { content: ''; position: absolute; width: 18px; height: 18px; top: -10px; border: 1px solid var(--color-line); border-radius: 50%; background: var(--color-paper); }
+.reconnect-body::before { left: -10px; }.reconnect-body::after { right: -10px; }
+.reconnect-pass { display: flex; align-items: center; gap: 10px; padding-bottom: 21px; border-bottom: 1px solid var(--color-line); }
+.reconnect-pass > svg { flex-shrink: 0; color: var(--color-orange-text); }
+.reconnect-pass > div { flex: 1; }.reconnect-pass strong, .reconnect-pass div span { display: block; }
+.reconnect-pass strong { font-size: 13px; }.reconnect-pass div span { margin-top: 2px; color: var(--color-muted); font-size: 12px; }
+.reconnect-pass-tag { max-width: 78px; text-align: right; color: var(--color-muted); font-size: 9px; font-weight: 700; letter-spacing: .08em; line-height: 1.5; }
+.reconnect-status { display: flex; align-items: flex-start; gap: 12px; margin-top: 23px; }.reconnect-status > svg { flex-shrink: 0; margin-top: 2px; color: var(--color-orange-text); }
+.reconnect-status strong { display: block; font-size: 14px; }.reconnect-status p { margin-top: 7px; font-size: 13px; line-height: 1.65; color: var(--color-muted); }
+.reconnect-status--failed > svg { color: var(--color-danger); }
+.reconnect-track { overflow: hidden; height: 4px; border-radius: 2px; margin-top: 20px; background: #ede8de; }.reconnect-track span { display: block; height: 100%; width: 36%; border-radius: inherit; background: var(--color-orange); animation: reconnect-track 1.7s ease-in-out infinite; }
+.reconnect-spinner { animation: race-spin 1.3s linear infinite; }
+.reconnect-actions { display: grid; gap: 10px; margin-top: 24px; }.reconnect-actions > button { min-height: 48px; width: 100%; }.reconnect-actions > button svg:last-child { margin-left: auto; }
+.reconnect-help { margin-top: 16px; color: var(--color-muted); font-size: 12px; line-height: 1.65; }
+.reconnect-host { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; margin: 16px auto 0; padding: 8px 12px; font-size: 13px; font-weight: 650; color: var(--color-muted); }.reconnect-host:hover { color: var(--color-orange-text); }
+.team-reconnect button:focus-visible { outline: 3px solid var(--color-orange-text); outline-offset: 4px; }
+@keyframes reconnect-track { from { transform: translateX(-110%); } to { transform: translateX(380%); } }
+@media(max-width: 380px) { .team-reconnect { padding-inline: 16px; }.reconnect-hero { padding: 24px; }.reconnect-body { padding: 22px 24px; }.reconnect-art { margin-top: 20px; } }
+@media(prefers-reduced-motion: reduce) { .reconnect-spinner, .reconnect-track span { animation: none; }.reconnect-track span { margin: auto; } }

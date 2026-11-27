@@ -13,6 +13,14 @@ and the host can shrink in the lobby or during an active game without starting
 the countdown. Existing sessions and explicitly supplied plans are preserved.
 The final-zone limit and ended-game restriction still apply.
 
+Hosted migration audit on 2026-11-27: all 34 repository migrations are applied.
+The remaining migrations were installed as `20261127110328` (24, timer seek),
+`20261127110329` (25, timer pause), `20261127110330` (30, review RPC), and
+`20261127110331` (31, saved zones). The API schema cache was refreshed and
+`review_submission` was verified through the Supabase API using a null proof ID,
+which correctly returned `Submission not found`. Existing sessions, challenge
+rows, submissions and clue rewards were verified unchanged during application.
+
 For multi-image/video/text proof submission, compressed upload copies, and
 migration 26 deployment requirements, see [Submission evidence](../docs/submission-evidence.md).
 

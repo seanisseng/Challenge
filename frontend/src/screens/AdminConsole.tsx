@@ -4,7 +4,7 @@ import type {AdminGameUpdate} from '../lib/gameUpdates';
 import { applyMapEvent,mergeMapSnapshot } from "../lib/gameMap";
 import type { MapEvent } from "../lib/gameMap";
 import "../game-map.css";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { AdminBoard, AdminBoardSkeleton } from "../components/AdminBoard";
 import { ReviewTab, CodesTab, CluesTab, ProgressTab } from "../components/RaceHostViews";
@@ -53,6 +53,12 @@ export default function AdminConsole({ onSignOut }: Props) {
   const [deletionNotice,setDeletionNotice]=useState<string|null>(null);
   const [loading, setLoading] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [reviewRequestBusy,setReviewRequestBusy]=useState(false);
+  const [reviewTarget,setReviewTarget]=useState<{sessionId:string;submissionId:string}|null>(null);
+  const reviewInFlight=useRef(false);
+  // A stale snapshot must not unlock the proof while confirmation is pending.
+  const reviewBusy=reviewRequestBusy||Boolean(reviewTarget&&reviewTarget.sessionId===state?.session.id
+    &&state.submissions.some(item=>item.id===reviewTarget.submissionId&&item.status==='pending'));
 
   const fail = useCallback(
     (err: unknown, fallback: string) => {
@@ -182,6 +188,25 @@ export default function AdminConsole({ onSignOut }: Props) {
     }
   };
 
+  const review = async (submissionId:string,action: () => Promise<unknown>, fallback: string) => {
+    if(reviewInFlight.current||reviewBusy)return;
+    reviewInFlight.current=true;setReviewRequestBusy(true);
+    setReviewTarget({sessionId:session.id,submissionId});
+    let saved=false;
+    try{
+      setError(null);
+      await action();
+      saved=true;
+      // A successful request may arrive before its live queue update.
+      const confirmed=await fetchAdminState(session.id);
+      setState(current=>current?.session.id===session.id?confirmed:current);
+    }catch(err){
+      if(!saved)setReviewTarget(null);
+      fail(err,fallback);
+    }
+    finally{reviewInFlight.current=false;setReviewRequestBusy(false);}
+  };
+
   const tabs: { id: Tab; label: string; badge?: number }[] = [
     { id: "review", label: "Review", badge: pendingCount },
     { id: "codes", label: "Team codes" },
@@ -219,18 +244,19 @@ export default function AdminConsole({ onSignOut }: Props) {
       </header>
       <main className="race-main">
         {deletionNotice?<p className="connection-notice" role="status">{deletionNotice}</p>:null}
-        <ConnectionNotice status={status} error={error} retrying={retrying} onRetry={retryBoard} />
+        <ConnectionNotice status={status} error={error} retrying={retrying} onRetry={retryBoard} confirmationPending={reviewBusy&&!reviewRequestBusy} />
 
         {tab === "review" ? (
           <ReviewTab
+            busy={reviewBusy}
             submissions={state.submissions}
             selectedId={selectedSubmissionId}
             onSelect={setSelectedSubmissionId}
             onApprove={(id, note) =>
-              run(() => approveSubmission(id, note), "could not approve")
+              review(id,() => approveSubmission(id, note), "could not approve")
             }
             onReject={(id, note) =>
-              run(() => rejectSubmission(id, note), "could not reject")
+              review(id,() => rejectSubmission(id, note), "could not reject")
             }
           />
         ) : null}

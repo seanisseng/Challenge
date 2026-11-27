@@ -16,7 +16,7 @@ import AdminLogin from "./screens/AdminLogin";
 import JoinScreen from "./screens/JoinScreen";
 import TeamDashboard from "./screens/TeamDashboard";
 import {locationPromptKey} from './components/LocationSharingPrompt';
-import { TeamProgressSkeleton } from "./components/TeamProgressCards";
+import { TeamReconnect } from "./components/TeamReconnect";
 
 export default function App() {
   const route = useRoute();
@@ -34,7 +34,7 @@ export default function App() {
 function PlayerRoute() {
   const [freshJoin,setFreshJoin]=useState(false);
   const [state, setState] = useState<TeamState | null>(null);
-  const [booting, setBooting] = useState(true);
+  const [booting, setBooting] = useState(()=>Boolean(getTeamToken()));
   const [restoreFailed, setRestoreFailed] = useState(false);
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   // A stored team token means this device already joined: restore silently.
@@ -46,11 +46,16 @@ function PlayerRoute() {
       return;
     }
     let cancelled = false;
+    const controller=new AbortController();
     setBooting(true);
     setRestoreFailed(false);
-    fetchTeamState(token)
+    const timeout=window.setTimeout(()=>{
+      controller.abort();
+      if(!cancelled){setRestoreFailed(true);setBooting(false);}
+    },15_000);
+    fetchTeamState(token,{signal:controller.signal})
       .then((snapshot) => {
-        if (!cancelled) setState(snapshot);
+        if (!cancelled&&!controller.signal.aborted) setState(snapshot);
       })
       .catch(error => {
         if (cancelled) return;
@@ -58,14 +63,23 @@ function PlayerRoute() {
         else setRestoreFailed(true);
       })
       .finally(() => {
+        window.clearTimeout(timeout);
         if (!cancelled) setBooting(false);
       });
     return () => {
       cancelled = true;
+      controller.abort();
+      window.clearTimeout(timeout);
     };
   }, [restoreAttempt]);
 
-  if (booting) return <Booting label="Rejoining your team…" />;
+  const useTeamCode=()=>{
+    setTeamToken(null);setBooting(false);setRestoreFailed(false);
+    setRestoreAttempt(value=>value+1);
+  };
+
+  if (booting||restoreFailed) return <TeamReconnect key={restoreAttempt} failed={restoreFailed}
+    onRetry={()=>setRestoreAttempt(value=>value+1)} onUseCode={useTeamCode} onAdmin={()=>navigate('/admin')}/>;
 
   if (state) {
     return (
@@ -79,13 +93,6 @@ function PlayerRoute() {
       />
     );
   }
-
-  if (restoreFailed) return <main className="race-entry mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-6 px-5 py-12">
-    <header className="entry-heading"><h1>Reconnect to your team</h1></header>
-    <section className="card entry-ticket space-y-4 p-5"><p role="alert">We could not reconnect. Your saved login is still on this device.</p>
-      <button type="button" className="btn-primary w-full" onClick={() => setRestoreAttempt(value => value + 1)}>Try again</button>
-    </section>
-  </main>;
 
   return (
     <JoinScreen
@@ -121,14 +128,5 @@ function AdminRoute() {
         setAuthed(false);
       }}
     />
-  );
-}
-
-function Booting({ label }: { label: string }) {
-  return (
-    <main className="mx-auto max-w-lg px-3 py-6">
-      <p className="mb-4 text-sm font-medium text-slate-600">{label}</p>
-      <TeamProgressSkeleton />
-    </main>
   );
 }

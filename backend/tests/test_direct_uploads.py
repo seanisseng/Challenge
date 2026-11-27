@@ -58,7 +58,7 @@ def test_signed_uploads_only_use_server_generated_paths(monkeypatch):
     monkeypatch.setattr(direct_uploads,'get_settings',lambda:SimpleNamespace(proof_bucket='proofs',supabase_url='https://project.supabase.co'))
     result=direct_uploads.authorize('request','challenge',[],{'id':'member','team':{'id':'team'}})
     client.storage.from_.return_value.create_signed_upload_url.assert_called_once_with('room/team/random.mp4')
-    assert result['endpoint']=='https://project.storage.supabase.co/storage/v1/upload/resumable'
+    assert result['endpoint']=='https://project.storage.supabase.co/storage/v1/upload/resumable/sign'
     assert result['uploads'][0]['token']=='upload-token'
 
 

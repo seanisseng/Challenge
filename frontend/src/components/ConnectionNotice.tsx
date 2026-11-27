@@ -1,22 +1,23 @@
 import { LoaderCircle, RefreshCw, TriangleAlert, WifiOff } from "lucide-react";
 
-export function ConnectionNotice({ status, error, retrying, onRetry }: {
+export function ConnectionNotice({ status, error, retrying, onRetry, confirmationPending=false }: {
   status: "connecting" | "live" | "offline";
   error: string | null;
   retrying: boolean;
   onRetry: () => void;
+  confirmationPending?: boolean;
 }) {
   const offline = status === "offline" || Boolean(error?.includes("cannot reach the backend"));
-  if (!offline && !error) return null;
+  if (!offline && !error && !confirmationPending) return null;
   const Icon = offline ? WifiOff : TriangleAlert;
   return <div className={`connection-notice ${offline ? "connection-notice--offline" : "connection-notice--error"}`} role="alert">
     <span className="connection-notice-icon"><Icon size={22} aria-hidden="true" /></span>
-    <div><strong>{offline ? "Connection interrupted" : "That change did not go through"}</strong>
-      <p>{offline ? "Your last board is still here. We are reconnecting automatically; you can also try again." : error}</p>
+    <div><strong>{confirmationPending ? "Waiting for decision confirmation" : offline ? "Connection interrupted" : "That change did not go through"}</strong>
+      <p>{confirmationPending ? error??"Your decision was sent. Waiting for the updated queue; you can refresh its status." : offline ? "Your last board is still here. We are reconnecting automatically; you can also try again." : error}</p>
     </div>
-    {offline ? <button type="button" className="btn-secondary" disabled={retrying} onClick={onRetry}>
+    {offline || confirmationPending ? <button type="button" className="btn-secondary" disabled={retrying} onClick={onRetry}>
       {retrying ? <LoaderCircle size={16} className="race-spinner" aria-hidden="true" /> : <RefreshCw size={16} aria-hidden="true" />}
-      {retrying ? "Trying again..." : "Try again"}
+      {retrying ? "Trying again..." : confirmationPending ? "Refresh status" : "Try again"}
     </button> : null}
   </div>;
 }

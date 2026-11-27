@@ -17,6 +17,7 @@ test('resumable video chunks bypass Vercel and finalize one proof',async({page})
   const reply=(status:number,extra:Record<string,string>={})=>{response.writeHead(status,{...headers,...extra});response.end();};
   const method=request.method;
   if(method==='OPTIONS'){reply(204);return;}
+  if(!request.url?.startsWith('/resumable/sign')||request.headers['x-signature']!=='signed-test-token'){reply(401);return;}
   if(method==='POST'){reply(201,{Location:endpoint+'/one','Upload-Offset':'0'});return;}
   if(method==='HEAD'){reply(200,{'Upload-Offset':String(offset),'Upload-Length':String(size)});return;}
   if(method!=='PATCH'){reply(405);return;}
@@ -29,7 +30,7 @@ test('resumable video chunks bypass Vercel and finalize one proof',async({page})
   reply(204,{'Upload-Offset':String(offset)});
  });
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
- endpoint=`http://127.0.0.1:${(server.address() as {port:number}).port}/resumable`;
+ endpoint=`http://127.0.0.1:${(server.address() as {port:number}).port}/resumable/sign`;
  try{
  await page.goto('/');
  const result=await page.evaluate(async({size,endpoint})=>{
@@ -50,6 +51,40 @@ test('resumable video chunks bypass Vercel and finalize one proof',async({page})
  expect(result).toEqual(['/api/uploads','/api/uploads/one/complete','/api/submissions/finalize']);
  }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
+
+for(const status of [401,413]){
+ test(`Storage rejection HTTP ${status} reports its cause without leaking signed URLs`,async({page})=>{
+  const server=createServer((request,response)=>{
+   response.writeHead(request.method==='OPTIONS'?204:status,{
+    'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'POST,PATCH,HEAD,OPTIONS',
+    'Access-Control-Allow-Headers':'*','Tus-Resumable':'1.0.0',
+   });
+   response.end('Internal error containing https://storage.invalid/private?token=do-not-show');
+  });
+  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const endpoint=`http://127.0.0.1:${(server.address() as {port:number}).port}/resumable/sign`;
+  try{
+   await page.goto('/');
+   const result=await page.evaluate(async endpoint=>{
+    const path='/src/lib/directUploader.ts';const {uploadProof}=await import(path);
+    const calls:string[]=[];
+    const post=async(path:string)=>{
+     calls.push(path);
+     return {batch_id:'rejected',submission_id:null,bucket:'proofs',endpoint,
+      uploads:[{id:'rejected',path:'room/team/proof.jpg',ordinal:0,token:'signed-token',verified_at:null}]};
+    };
+    try{
+     await uploadProof('rejected-upload',{files:[new File(['proof'],'proof.jpg',{type:'image/jpeg'})],text:''},'test-team',post,{});
+     return {message:'Unexpected success',calls};
+    }catch(error){return {message:(error as Error).message,calls};}
+   },endpoint);
+   expect(result.message).toContain(`HTTP ${status}`);
+   expect(result.message).not.toContain('do-not-show');
+   expect(result.message).toContain('draft');
+   expect(result.calls).toEqual(['/api/uploads']);
+  }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+ });
+}
 
 for(const [name,source,accepted] of [['small MP4','short.mp4',true],['WebM conversion','short.webm',true],['over 30 seconds','long.mp4',false]] as const){
  test(`video preparation: ${name}`,async({page})=>{

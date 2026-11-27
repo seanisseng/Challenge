@@ -9,6 +9,7 @@ import "../game-map.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CircleHelp, LayoutGrid, LoaderCircle, LogOut, MoreHorizontal, MapPinned, Pencil, RefreshCw, Ticket, Users, WifiOff } from "lucide-react";
 import { TeamNameDialog } from "../components/TeamNameDialog";
+import {PlayerTeamCode} from '../components/PlayerTeamCode';
 import { RaceDialog } from "../components/RaceDialog";
 import { CardTable } from "../components/CardTable";
 import { TeamProgressCards, NoTeams, emptyTierCounts, type TierCounts } from "../components/TeamProgressCards";
@@ -209,6 +210,7 @@ export default function TeamDashboard({ initialState, onLeave,freshJoin=false }:
   return (
     <div className={`race-player race-player--${mobileTab} min-h-screen pb-28 lg:pb-16`}>
       <header className="player-header">
+        <PlayerTeamCode code={state.team.join_code}/>
         <div className="player-header-inner">
           <div className="min-w-0 flex-1">
             <h1>

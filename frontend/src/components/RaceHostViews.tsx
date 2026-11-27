@@ -12,7 +12,8 @@ function PageHeading({ eyebrow, title, children }: { eyebrow: string; title: str
   return <div className="race-page-heading"><p className="race-eyebrow"><Route size={14} aria-hidden="true" />{eyebrow}</p><h2>{title}</h2><p>{children}</p></div>;
 }
 
-export function ReviewTab({ submissions, selectedId, onSelect, onApprove, onReject }: {
+export function ReviewTab({ submissions, selectedId, onSelect, onApprove, onReject, busy }: {
+  busy: boolean;
   submissions: AdminSubmission[];
   selectedId: string | null;
   onSelect: (id: string) => void;
@@ -26,16 +27,13 @@ export function ReviewTab({ submissions, selectedId, onSelect, onApprove, onReje
   useEffect(() => { if (selectedId) workspaceRef.current?.focus(); }, [selectedId]);
   const selected = pending.find(item => item.id === selectedId) ?? pending[0];
   const [notes, setNotes] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
   const [shortcuts, setShortcuts] = useState(true);
   const [previous,setPrevious]=useState<AdminSubmission|null>(null);
   const actionRef = useRef<(action: "approve" | "reject") => void>(() => {});
 
   const decide = async (action: "approve" | "reject") => {
     if (!selected || busy || previous) return;
-    setBusy(true);
-    try { await (action === "approve" ? onApprove : onReject)(selected.id, notes[selected.id]?.trim() || undefined); }
-    finally { setBusy(false); }
+    await (action === "approve" ? onApprove : onReject)(selected.id, notes[selected.id]?.trim() || undefined);
   };
   actionRef.current = action => { void decide(action); };
   useEffect(() => {
@@ -55,13 +53,14 @@ export function ReviewTab({ submissions, selectedId, onSelect, onApprove, onReje
     <PageHeading eyebrow="RACE CONTROL / PROOF DESK" title="Make the call.">Review the oldest submission first. New submissions join the bottom of the queue.</PageHeading>
     <div className="host-view-summary"><span><b>{String(pending.length).padStart(2, "0")}</b> awaiting review</span><span><b>{String(history.length).padStart(2, "0")}</b> reviewed</span><span className="review-shortcuts"><Keyboard size={15} aria-hidden="true" /><button type="button" aria-pressed={shortcuts} onClick={() => setShortcuts(value => !value)}>{shortcuts ? "A approve / R reject: On" : "Keyboard shortcuts: Off"}</button></span></div>
     {!selected ? <div className="race-empty"><Inbox size={34} aria-hidden="true" /><h3>All caught up.</h3><p>New proof will appear here as teams submit. Keep the race moving from the Board.</p></div> : <div className="review-layout">
-      <aside className="review-inbox" aria-label="Pending submissions"><p className="race-eyebrow">INCOMING PROOF</p><ol>{pending.map((item, index) => <li key={item.id}><button type="button" className={item.id === selected.id ? "review-inbox-item review-inbox-item--selected" : "review-inbox-item"} onClick={() => onSelect(item.id)} aria-pressed={item.id === selected.id}>
+      <aside className="review-inbox" aria-label="Pending submissions"><p className="race-eyebrow">INCOMING PROOF</p><ol>{pending.map((item, index) => <li key={item.id}><button type="button" disabled={busy} className={item.id === selected.id ? "review-inbox-item review-inbox-item--selected" : "review-inbox-item"} onClick={() => onSelect(item.id)} aria-pressed={item.id === selected.id}>
         <span className="review-inbox-number">{String(index + 1).padStart(2, "0")}</span><span><strong>{item.teams?.name ?? "Team"}</strong><span>{item.challenges?.title ?? "Challenge"}</span></span><ArrowRight size={14} aria-hidden="true" /></button></li>)}</ol></aside>
       <article ref={workspaceRef} tabIndex={-1} className="review-workspace" aria-label="Selected submission">
         <SubmissionEvidenceView key={selected.id} submission={selected}/>
         <div className="review-decision"><SubmissionStatusBadge status="pending" /><p className="race-eyebrow">{selected.teams?.name ?? "Team"}</p><h3>{selected.challenges?.title ?? "Challenge"}</h3><p className="review-decision-help">Approve valid proof to award the challenge and unlock its clue. Reject it to let the team try again.</p>
-          <label htmlFor="review-note">Note for the team <span>(optional)</span></label><textarea id="review-note" className="field" rows={4} maxLength={280} value={notes[selected.id] ?? ""} onChange={event => setNotes(current => ({ ...current, [selected.id]: event.target.value }))} placeholder="What did you see?" />
-          <div className="review-decision-buttons"><button type="button" className="btn-success" disabled={busy} onClick={() => void decide("approve")}><Check size={18} aria-hidden="true" />Approve <kbd>A</kbd></button><button type="button" className="btn-danger" disabled={busy} onClick={() => void decide("reject")}><X size={18} aria-hidden="true" />Reject <kbd>R</kbd></button></div>
+          <label htmlFor="review-note">Note for the team <span>(optional)</span></label><textarea id="review-note" className="field" disabled={busy} rows={4} maxLength={280} value={notes[selected.id] ?? ""} onChange={event => setNotes(current => ({ ...current, [selected.id]: event.target.value }))} placeholder="What did you see?" />
+          <div className="review-decision-buttons" aria-busy={busy}><button type="button" className="btn-success" disabled={busy} onClick={() => void decide("approve")}><Check size={18} aria-hidden="true" />Approve <kbd>A</kbd></button><button type="button" className="btn-danger" disabled={busy} onClick={() => void decide("reject")}><X size={18} aria-hidden="true" />Reject <kbd>R</kbd></button></div>
+          {busy?<p role="status">Saving decision…</p>:null}
           <p className="review-stakes"><LockKeyhole size={13} aria-hidden="true" />First approved proof wins. Rival pending proofs are rejected automatically.</p>
         </div>
       </article>

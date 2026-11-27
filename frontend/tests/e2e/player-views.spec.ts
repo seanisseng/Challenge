@@ -7,7 +7,7 @@ import {readFileSync} from 'node:fs';
 async function playerFixture(page: Page, count = 6) {
   const host = fixtureState();
   const state: TeamState = {
-    kind: "team", session: host.session, team: { id: "team-0", name: "Team 1" },
+    kind: "team", session: host.session, team: { id: "team-0", name: "Team 1",join_code:'TEAM01' },
     me: { id: "member-1", name: "Avery" }, board: [...host.board, ...host.queue].slice(0, count), progress: host.progress,
     clues: [{ id: "sample", tier: "tier1", title: "Sample unlocked clue", body: "A local fixture clue for display checks.", media_url: null, unlocked_at: "2026-11-12" }], my_submissions: [], clue_awards: [],
   };
@@ -30,6 +30,27 @@ async function playerFixture(page: Page, count = 6) {
   await page.routeWebSocket(/\/ws\?/, ws => { socket = ws; ws.send(JSON.stringify(state)); });
   return { state, uploads, push: () => socket?.send(JSON.stringify(state)),pushEvent:(event:unknown)=>socket?.send(JSON.stringify(event)) };
 }
+
+test('players see their team code at the top of the header and can copy it',async({page},info)=>{
+ const fixture=await playerFixture(page);
+ await page.addInitScript(()=>{
+  Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async(value:string)=>{(window as unknown as {copiedCode:string}).copiedCode=value;}}});
+ });
+ await page.goto('/');
+ const copy=page.getByRole('button',{name:'Copy team code TEAM01',exact:true});
+ await expect(copy).toBeVisible();
+ await expect(page.locator('.player-team-code-bar')).toContainText('TEAM01');
+ expect((await copy.boundingBox())!.y).toBeLessThan((await page.locator('.player-identity').boundingBox())!.y);
+ await copy.click();
+ await expect.poll(()=>page.evaluate(()=>(window as unknown as {copiedCode:string}).copiedCode)).toBe('TEAM01');
+ await expect(page.getByRole('status').filter({hasText:'Team code copied'})).toBeVisible();
+ fixture.pushEvent({kind:'team_update',session_id:fixture.state.session.id,team_id:fixture.state.team.id,changes:{
+  session:fixture.state.session,board:fixture.state.board,progress:fixture.state.progress,clues:[],clue_awards:[],my_submissions:[],
+ }});
+ await expect(copy).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:`artifacts/player-team-code-${info.project.name}.png`,fullPage:true});
+});
 
 test('large photos are compressed before attaching and submission',async({page})=>{
  const fixture=await playerFixture(page);
@@ -254,7 +275,7 @@ for (const size of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
         }));
       }
       await expect(page.locator(".challenge-card")).toHaveCount(count);
-      expect((await page.locator(".player-header").boundingBox())!.height).toBeLessThanOrEqual(56);
+      expect((await page.locator(".player-header").boundingBox())!.height).toBeLessThanOrEqual(100);
       expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1)).toBe(true);
       await expect(page.getByText("Live", { exact: true })).toBeVisible();
       const list = page.locator(".challenge-list");
@@ -362,7 +383,7 @@ test("safe areas and toolbar resizing preserve contained scrolling", async ({ pa
   await page.goto("/");
   await page.addStyleTag({ content: ".race-player { --player-safe-top: 47px; --player-safe-bottom: 34px; }" });
   await expect(page.locator(".challenge-card")).toHaveCount(6);
-  expect((await page.locator(".player-header").boundingBox())!.height).toBe(103);
+  expect((await page.locator(".player-header").boundingBox())!.height).toBe(147);
   expect((await page.locator(".player-mobile-nav").boundingBox())!.height).toBe(90);
   const list = page.locator(".challenge-list");
   expect(await list.evaluate(el => el.scrollHeight <= el.clientHeight + 1)).toBe(true);

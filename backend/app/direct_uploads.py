@@ -33,7 +33,7 @@ def authorize(request_id, challenge_id, files, member):
     if host.endswith('.supabase.co') and not host.endswith('.storage.supabase.co'):
         base='https://'+host.removesuffix('.supabase.co')+'.storage.supabase.co'
     return {'batch_id':result['batch_id'],'submission_id':result['submission_id'],'uploads':uploads,
-            'bucket':settings.proof_bucket,'endpoint':base+'/storage/v1/upload/resumable'}
+            'bucket':settings.proof_bucket,'endpoint':base+'/storage/v1/upload/resumable/sign'}
 
 
 def get_upload(upload_id, team_id):

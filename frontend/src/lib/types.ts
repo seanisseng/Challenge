@@ -90,7 +90,7 @@ export interface TeamState {
   kind: "team";
   session: SessionInfo;
   me: { id: string; name: string };
-  team: { id: string; name: string };
+  team: { id: string; name: string; join_code?: string|null };
   board: Challenge[];
   progress: TeamProgress[];
   clues: Clue[];
