@@ -28,6 +28,7 @@ def test_storage_path_traversal_is_rejected():
 
 @pytest.fixture
 def cleanup(monkeypatch):
+    monkeypatch.setattr(repo,'pending_direct_uploads',lambda _:False)
     job={'session_id':SESSION,'buckets':['proofs','assets'],'attempts':0}
     query=Mock()
     for method in ('select','eq','limit','update','delete'):getattr(query,method).return_value=query
@@ -52,6 +53,11 @@ def test_storage_failure_keeps_job_for_retry(cleanup):
     assert repo._cleanup_session_media(SESSION) is True
     query.delete.assert_not_called()
     assert query.update.call_args.args[0]=={'last_error':'RuntimeError'}
+
+def test_deleted_prefix_is_reswept_until_upload_capabilities_expire(cleanup,monkeypatch):
+    monkeypatch.setattr(repo,'pending_direct_uploads',lambda _:True)
+    assert repo._cleanup_session_media(SESSION) is True
+    cleanup[1].delete.assert_not_called()
 
 def test_upload_after_session_deletion_never_recreates_media(monkeypatch):
     monkeypatch.setattr(repo,'get_session',Mock(side_effect=HTTPException(404,'session not found')))

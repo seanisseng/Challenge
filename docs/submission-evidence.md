@@ -1,77 +1,122 @@
 # Submission evidence
 
-Players can attach up to ten images/videos, totaling at most **4 MiB
-(4,194,304 bytes)** per submission, and an optional message. This combined
-source-file budget leaves room for the message and multipart headers below
-Vercel's default 4.5 MB request limit. The browser rejects oversized drafts
-before sending; the API independently enforces the same combined limit before
-processing or uploading any media, including the legacy `file` field.
-Supported photos are resized in the browser before attaching: a JPEG upload
-copy uses a longest edge of at most 1600 pixels and targets 350 KiB. Encoding
-tries lower quality/dimensions when needed and keeps the original if conversion
-fails or would make the file larger. GIFs, videos, files over 25 MiB, and formats
-the browser cannot decode are left unchanged and must still fit the combined
-4 MiB budget. Originals remain untouched. Trim/compress large videos before
-attaching. A nonblank
-message alone is valid. An empty draft cannot be submitted; the API
-and database also enforce this rule.
+Players can attach up to ten images/videos and an optional message. A nonblank
+message alone is valid. Videos must be **30 seconds or shorter**. Longer clips
+must be trimmed by the player; the app never silently cuts off evidence.
 
-## Player flow
+## Player flow and preparation
 
-1. Add or remove attachments and write an optional message. Attachment previews
-   use local object URLs; choosing a file makes no upload or submission request.
-2. Check the inline previews and message, editing or removing attachments as needed.
-3. Select **Submit** to send directly, without a separate review step. The API prepares all files, uploads them, and creates
-   one pending submission. Failed requests keep the draft available for retry.
+1. Add attachments and a message. Files stay on the device until Submit.
+2. Supported photos become JPEG upload copies (at most 1600 pixels on the long
+   edge, targeting 350 KiB). Unsupported decoders preserve the original.
+3. Selecting a video lazily loads the locally served single-thread FFmpeg
+   WebAssembly worker (approximately 32 MB on the first visit, cached as hashed
+   static assets). It checks duration and codecs before accepting the file.
+4. Compatible H.264/AAC MP4s up to 20 MiB skip conversion. Other videos are
+   converted to MP4, up to 720p / 30 fps, around 3 Mbps H.264 plus 128 kbps AAC.
+   Audio is preserved when present. Sources may be at most 200 MiB; prepared
+   videos must fit within 45 MiB. Images may be at most 25 MiB; the combined
+   submission limit is 450 MiB. Supabase project storage quotas still apply.
+5. Preparation shows its status and can be cancelled. After three minutes, an
+   unsuccessful preparation stops with advice to export a smaller 720p MP4.
+   The prior draft and original recordings remain untouched.
+6. Submit authorizes private upload paths, transfers files directly to Supabase,
+   verifies them, and finalizes one pending proof. At most two files transfer at
+   once. Each transfer uses 6 MiB TUS chunks, with a smaller final chunk. These
+   are transport chunks, not separate playable clips: each file stays one video.
 
-Drafts are saved in IndexedDB on this device, scoped to the game and team,
-and restored after reload. Attachments stay local until Submit. A storage/quota
-failure shows a warning instead of claiming the draft was saved. While a draft
-is being saved, or an upload is running, the browser warns before leaving.
-Private browsing, cleared site data or browser eviction can remove saved drafts.
-Some phone formats such as HEIC may not preview in every browser; the attached
-filename remains visible. WebKit's Blob-storage failure falls back to bounded
-4 MiB binary chunks, rather than one huge JavaScript buffer per video.
+Browser conversion can be slow or fail on memory-limited devices or unsupported
+recordings; retain the draft and provide a clear fallback rather than uploading
+an unverified original. Existing drafts saved before this rollout may need their
+videos reattached to prepare a compatible copy. Host playback uses normal video
+controls and retains a signed download fallback. Real iPhone hardware playback
+and HDR camera variants require device verification beyond Windows WebKit.
 
-The form shows upload percentage, followed by a preparing/saving state, and has
-a Cancel upload button. Cancel aborts the browser request and retains the draft.
-The server checks disconnection before processing another video, uploading files
-or registering proof. An encoder already running may finish its current clip.
-A request committed just before cancellation can still appear; the client checks
-the latest snapshot before offering another attempt. Pending proofs block a
-second submission, including a server preflight before any video processing.
+Drafts persist in IndexedDB, scoped to the game and team. Choosing files does not
+upload them. Storage failures show a warning instead of claiming the draft is
+saved. Closing the proof sheet cancels active preparation; cancelling upload
+retains the draft. A request committed just before cancellation may still
+appear, so the client checks current state before offering another submission.
 
-The host's existing Review tab displays every attachment and the message. Videos
-have native playback controls. Approval, rejection, first-approved-wins locking,
-and clue rewards continue through the existing decision endpoints.
-The decision log's **View / download proof** button opens reviewed evidence;
-each attachment has a short-lived signed **Download** link. Downloads are the
-stored upload copies (including compressed video), not original phone recordings.
+## Direct-upload API and verification
 
-## Video copies on Supabase Free
+- `POST /api/uploads`: authenticated with the existing team token; accepts a
+  request UUID, challenge UUID, and file manifest. The database atomically
+  allocates a batch and unique team-owned paths. Repeated identical requests
+  reuse the batch; signed upload tokens are never logged or persisted in drafts.
+- The browser sends files directly to the project's Storage hostname using
+  signed TUS capabilities. No Supabase service key is shipped to the browser.
+  Interrupted transfers resume their offset; uncertain completed transfers are
+  verified before attempting another upload.
+- `POST /api/uploads/{id}/complete`: checks team ownership, expiry and session
+  existence, then reads the actual stored object with a bounded streaming
+  download. Size, image signature, video container/codecs and duration are
+  verified server-side. Vercel does not re-encode direct uploads.
+- `POST /api/submissions/finalize`: accepts only a batch UUID and message.
+  A transactional service-only function requires every attachment to be
+  verified, rechecks challenge availability, and creates exactly one pending
+  proof. Duplicate finalization returns the same submission ID. Client-supplied
+  paths, sizes and durations cannot authorize evidence.
 
-Original MP4/MOV/WebM recordings may be up to 60 seconds and must fit within
-the shared 4 MiB submission attachment budget before reaching the server. The
-backend creates a separate H.264/AAC MP4 using bundled FFmpeg from
-`imageio-ffmpeg`. It limits the longest edge to 1920 pixels, frame rate to 30 fps,
-video bitrate to 5 Mbps and audio to 128 kbps. HDR recordings are tone-mapped to
-SDR. The original recording remains unchanged. This reduces upload-copy quality
-in exchange for staying within the Free plan's per-file storage limit.
+All attachments use the new direct flow. `POST /api/submissions` remains as a
+legacy multipart path with its existing 4 MiB aggregate request budget and the
+new 30-second duration limit. Its backend encoding remains for old clients.
+The new direct flow bypasses Vercel's file-body limit; it does not increase it.
+Existing stored 60-second proofs remain reviewable.
 
-Prepared videos must fit within 45 MiB in Storage. That is an output safety
-cap, not an allowance for larger browser requests: all input images/videos
-combined must fit within 4 MiB. The existing database cap of 450 MiB is a
-Storage constraint, not the public upload limit. Free plan project-wide
-storage/bandwidth quotas still apply.
+## Expiry and session deletion
 
-The API streams source files to temporary disk and streams prepared copies to
-Storage rather than buffering whole videos in memory. At most two encoders run
-concurrently per server process. Deployment needs temporary disk space, an
-executable FFmpeg binary, and request/body/proxy timeouts sufficient for the
-original recording upload and encoding (up to five minutes per clip). Multiple
-No background upload service is added.
+Upload capabilities can outlive a page or deleted session. Durable batch records
+have no cascading session foreign key and remain until 25 hours after their last
+capability authorization, covering the 24-hour resumable URL lifetime plus a
+margin. Up to 20 unfinished attachment slots per team bound abandoned drafts.
+Reusing a saved upload batch does not consume extra slots.
+
+`GET /api/internal/uploads/cleanup` removes up to 50 expired orphan batches and
+retries session-prefix cleanup. Attached proofs in existing sessions are retained.
+Session deletion keeps its cleanup job until outstanding capabilities expire,
+so a late upload cannot permanently recreate deleted media. The daily Vercel
+cron runs at 19:00 UTC (03:00 Singapore time); cleanup may therefore occur up to
+about a day after expiry. Storage errors leave records available for retry.
+The endpoint requires `Authorization: Bearer <CRON_SECRET>`.
 
 ## Deployment
+
+### Direct uploads (migration 32)
+
+Apply all preceding migrations, then
+`backend/supabase/migrations/20260101000032_direct_proof_uploads.sql` through the
+Supabase SQL Editor or an authorized migration connection. It adds private
+upload tables, authorization/finalization functions and a 30-second constraint
+for new attachment data. It does not modify historical proofs or make Storage
+public. Migration 32 was applied to hosted project `ceqfgjqwvuqhtsbmxfdn` on
+2026-11-27 as version `20261127083953` (`direct_proof_uploads`). Both upload
+tables, RLS, the duration trigger, service-only RPC permissions and application
+SDK access were verified after commit. The API schema cache was refreshed.
+The working IPv4 migration connection is the Singapore session pooler
+`aws-1-ap-southeast-1.pooler.supabase.com:5432`, using
+`postgres.ceqfgjqwvuqhtsbmxfdn` and the existing database password.
+
+Set a random backend-only `CRON_SECRET` in Vercel Production (and locally when
+manually exercising cleanup). Never prefix it with `VITE_`. Deploy frontend and
+backend together, then reload open clients. Existing Supabase credentials and
+Storage bucket settings remain usable; the proof bucket must allow MP4 and at
+least 45 MiB per object, as configured by migration 26. Keep the global Storage
+limit at least as large. The browser needs access to the project's
+`*.storage.supabase.co` host for direct transfers.
+
+Before production, test a real phone recording and confirm that the daily cron
+can invoke cleanup. Check preparation time, upload time, verification time and
+Storage quota separately; a short file can still be large at high bitrates.
+
+Verification for migration 32: 45 frontend unit checks, the production build,
+focused backend validation/cleanup checks and three disposable PostgreSQL tests
+passed. Twenty-two Chromium/WebKit browser checks covered preparation, mixed
+proofs, retries, cancellation and draft recovery. Two additional checks exercised
+the built production assets. The chunk test received 6 MiB + 6 MiB + 1 MiB for
+a 13 MiB video, recovering a lost response without duplicate bytes. Browser-
+produced MP4s passed native format/duration inspection; actual iPhone hardware
+playback and a hosted upload remain rollout checks.
 
 ### Submission and review latency changes
 
@@ -109,7 +154,7 @@ limit were verified. Board reads also tolerate the old schema during a rolling d
 Install updated `backend/requirements.txt` on the API host. The global Supabase
 Storage limit can stay at the Free-plan default of 50 MB.
 
-## Verification
+## Historical verification before direct uploads
 
 The latency changes passed 43 frontend unit tests, TypeScript checking and the
 production build. Mocked backend checks verify one-call reviews, team-private

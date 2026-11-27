@@ -15,14 +15,14 @@ def test_a_short_phone_video_becomes_a_playable_bounded_mp4(tmp_path):
     original=source.read_bytes();duration=prepare_video(source,output,'video/mp4')
     assert duration==2;assert 0<output.stat().st_size<=MAX_VIDEO_OUTPUT;assert source.read_bytes()==original
 
-def test_videos_longer_than_sixty_seconds_are_rejected(tmp_path):
-    source=tmp_path/'long.mp4';make_video(source,62)
-    with pytest.raises(HTTPException,match='60 seconds'):
+def test_videos_longer_than_thirty_seconds_are_rejected(tmp_path):
+    source=tmp_path/'long.mp4';make_video(source,31)
+    with pytest.raises(HTTPException,match='30 seconds'):
         prepare_video(source,tmp_path/'upload.mp4','video/mp4')
 
-def test_sixty_second_video_is_accepted(tmp_path):
-    source=tmp_path/'minute.mp4';output=tmp_path/'upload.mp4';make_video(source,60)
-    assert prepare_video(source,output,'video/mp4')==60
+def test_thirty_second_video_is_accepted(tmp_path):
+    source=tmp_path/'half-minute.mp4';output=tmp_path/'upload.mp4';make_video(source,30)
+    assert prepare_video(source,output,'video/mp4')==30
     assert 0<output.stat().st_size<=MAX_VIDEO_OUTPUT
 
 def test_source_copy_enforces_size_and_rejects_empty_files(tmp_path):

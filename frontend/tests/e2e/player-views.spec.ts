@@ -2,6 +2,7 @@ import { test, expect, type Page, type WebSocketRoute } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { fixtureState, installBoardFixture } from "./board.fixture";
 import type { TeamState } from "../../src/lib/types";
+import {readFileSync} from 'node:fs';
 
 async function playerFixture(page: Page, count = 6) {
   const host = fixtureState();
@@ -11,11 +12,17 @@ async function playerFixture(page: Page, count = 6) {
     clues: [{ id: "sample", tier: "tier1", title: "Sample unlocked clue", body: "A local fixture clue for display checks.", media_url: null, unlocked_at: "2026-11-12" }], my_submissions: [], clue_awards: [],
   };
   const uploads: string[] = [];
+  let manifest:unknown[]=[];
   let socket: WebSocketRoute | undefined;
   await page.addInitScript(() => localStorage.setItem("challenge.team-token", "local-player-fixture"));
   await page.route(/\/api\//, async route => {
     if (route.request().method() === "POST") {
-      uploads.push(route.request().postData() ?? "");
+      if(new URL(route.request().url()).pathname==='/api/uploads'){
+        const body=route.request().postDataJSON();manifest=body.files;
+        await route.fulfill({json:{batch_id:'fixture-batch',submission_id:null,bucket:'proofs',endpoint:'https://storage.invalid/resumable',
+          uploads:body.files.map((_:unknown,ordinal:number)=>({id:`upload-${ordinal}`,ordinal,verified_at:'now',path:`proof-${ordinal}`,token:null}))}});return;
+      }
+      uploads.push(JSON.stringify({files:manifest,...route.request().postDataJSON()}));
       await route.fulfill({ json: { ok: true, photo_path: "fixture.jpg" } });
     } else await route.fulfill({ json: state });
   });
@@ -387,8 +394,7 @@ test("help, photo proof and leave retain their interactions", async ({ page }) =
   expect(uploads).toHaveLength(0);
   await page.getByRole('button',{name:'Submit',exact:true}).click();
   await expect.poll(() => uploads.length).toBe(1);
-  expect(uploads[0]).toContain('name="challenge_id"');
-  expect(uploads[0]).toContain('filename="proof.png"');
+  expect(JSON.parse(uploads[0]).files[0].name).toBe('proof.png');
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByLabel("Game menu").click();
@@ -406,7 +412,7 @@ test('proof drafts require evidence, retain edits, and submit mixed attachments 
  await page.getByRole('textbox',{name:/Message/}).fill('   ');await expect(review).toBeDisabled();
  await page.locator('input[type=file]').setInputFiles([
   {name:'first.png',mimeType:'image/png',buffer:Buffer.from('fixture image')},
-  {name:'clip.mp4',mimeType:'video/mp4',buffer:Buffer.from('fixture video')},
+  {name:'clip.mp4',mimeType:'video/mp4',buffer:readFileSync(new URL('../fixtures/video/short.mp4',import.meta.url))},
  ]);
  await expect(page.getByRole('list',{name:'Attached files'}).locator('li')).toHaveCount(2);
  expect(uploads).toHaveLength(0);
@@ -418,15 +424,14 @@ test('proof drafts require evidence, retain edits, and submit mixed attachments 
  await page.screenshot({path:`artifacts/proof-review-${info.project.name}.png`});
  await page.getByRole('button',{name:'Submit',exact:true}).click();
  await expect.poll(()=>uploads.length).toBe(1);
- expect(uploads[0]).toContain('filename="clip.mp4"');
- expect(uploads[0]).not.toContain('filename="first.png"');
+ expect(JSON.parse(uploads[0]).files.map((file:{name:string})=>file.name)).toEqual(['clip.mp4']);
  expect(uploads[0]).toContain('Our evidence for the host');
  await expect(page.locator('.challenge-sheet')).toHaveCount(0);
 });
 
 test('text-only proof survives a failed submit and can be retried',async({page})=>{
  const {uploads}=await playerFixture(page);let attempts=0;
- await page.route('**/api/submissions',async route=>{attempts++;if(attempts===1)await route.fulfill({status:400,json:{detail:'Please try again'}});else{uploads.push(route.request().postData()??'');await route.fulfill({json:{ok:true}});}});
+ await page.route('**/api/submissions/finalize',async route=>{attempts++;if(attempts===1)await route.fulfill({status:400,json:{detail:'Please try again'}});else{uploads.push(route.request().postData()??'');await route.fulfill({json:{ok:true}});}});
  await page.goto('/');await page.getByRole('button',{name:/Going Bananas/}).click();
  await page.getByRole('textbox',{name:/Message/}).fill('Text alone is valid');
  await page.getByRole('button',{name:'Submit',exact:true}).click();
@@ -484,7 +489,7 @@ test('message and attachment draft recover after a reload',async({page})=>{
 test('uploads show progress, allow cancellation and retain the draft',async({page})=>{
  await playerFixture(page);
  let release!:()=>void;const waiting=new Promise<void>(resolve=>{release=resolve;});
- await page.route('**/api/submissions',async route=>{await waiting;try{await route.fulfill({json:{ok:true}});}catch{/* Cancelled request. */}});
+ await page.route('**/api/submissions/finalize',async route=>{await waiting;try{await route.fulfill({json:{ok:true}});}catch{/* Cancelled request. */}});
  await page.goto('/');await page.getByRole('button',{name:/Going Bananas/}).click();
  await page.getByRole('textbox',{name:/Message/}).fill('Keep after cancelling');
  await page.getByRole('button',{name:'Submit',exact:true}).click();

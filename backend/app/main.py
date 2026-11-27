@@ -16,7 +16,7 @@ from app.media_cleanup import media_cleanup
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import admin, play, ws, maps
+from app.routers import admin, play, ws, maps, uploads
 
 settings = get_settings()
 
@@ -50,6 +50,7 @@ app.add_middleware(
 app.include_router(admin.public_router)
 app.include_router(admin.router)
 app.include_router(play.router)
+app.include_router(uploads.router)
 app.include_router(ws.router)
 app.include_router(maps.admin)
 app.include_router(maps.players)

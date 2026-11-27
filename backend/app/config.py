@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     # Substituted for the {{phone}} token in challenge text. Keeping the number
     # here means it never has to be committed or written to the database.
     contact_phone: str = ""
+    cron_secret: str = ""
 
     @property
     def cors_origins(self) -> list[str]:

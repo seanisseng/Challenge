@@ -1,5 +1,11 @@
 # Backend - API + Supabase Database
 
+Direct proof uploads require migration `20260101000032_direct_proof_uploads.sql`.
+The API authorizes private Storage paths, verifies uploaded bytes and 30-second
+video duration, then finalizes one proof transactionally. Configure the
+backend-only `CRON_SECRET` for daily Vercel orphan cleanup. See
+[submission evidence](../docs/submission-evidence.md) for rollout and limits.
+
 New-session forms and API requests default to eight teams. Apply migration
 `20260101000031_saved_session_zones.sql` before deploying lobby shrinking:
 new sessions save their default zones and destination atomically at creation,

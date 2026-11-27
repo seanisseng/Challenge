@@ -16,6 +16,9 @@
       ]
     }
   },
+  "crons": [
+    { "path": "/api/internal/uploads/cleanup", "schedule": "0 19 * * *" }
+  ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": { "service": "backend" } },
     { "source": "/ws", "destination": { "service": "backend" } },

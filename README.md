@@ -95,6 +95,13 @@ frontend's exact origin (comma-separated for multiple origins).
 
 ### Vercel project setup
 
+For direct video uploads, apply migration 32 after the earlier migrations and
+set a backend-only `CRON_SECRET` in Vercel Production. Videos are limited to
+30 seconds, prepared on the device, then transferred directly to private
+Supabase Storage in resumable chunks. See
+[direct-upload deployment](docs/submission-evidence.md#direct-uploads-migration-32)
+for migration, cleanup and device-verification steps.
+
 Before deploying the optimized submission/review code, apply
 [`20260101000030_review_submission_result.sql`](backend/supabase/migrations/20260101000030_review_submission_result.sql)
 through the Supabase SQL Editor. Deploy frontend and backend together and reload

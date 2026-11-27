@@ -1,6 +1,7 @@
 import type { MapPoint,MapStage } from "./gameMap";
 import {resolveApiBaseUrl} from './apiBaseUrl';
 import type {SubmissionDraft} from './submissionDraft';
+import {draftError} from './submissionDraft';
 import type {EvidenceAttachment} from './types';
 /**
  * Thin fetch wrapper around the FastAPI backend.
@@ -179,7 +180,19 @@ export function fetchClues(): Promise<Clue[]> {
   return request<Clue[]>("/api/clues");
 }
 
-export function submitProof(
+export async function submitProof(challengeId:string,draft:SubmissionDraft,
+ options:{signal?:AbortSignal;onProgress?:(percent:number)=>void}={}) {
+  const problem=draftError(draft);if(problem)throw new ApiError(problem,400);
+  const {uploadProof}=await import('./directUploader');
+  try{return await uploadProof(challengeId,draft,getTeamToken()??'',
+    <T>(path:string,body:unknown,signal?:AbortSignal)=>request<T>(path,{method:'POST',body,signal}),options);}
+  catch(error){
+    if(error instanceof ApiError||error instanceof DOMException&&error.name==='AbortError')throw error;
+    throw new ApiError(error instanceof Error?error.message:'Upload failed. Your draft is kept.',0);
+  }
+}
+
+export function submitProofLegacy(
   challengeId: string,
   draft: SubmissionDraft,
   options: {signal?:AbortSignal;onProgress?:(percent:number)=>void} = {},

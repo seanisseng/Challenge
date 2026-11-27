@@ -108,7 +108,7 @@ export function ChallengeSheet({ challenge, busy, error, trigger, onClose, onUpl
         {pending?'Awaiting host review':busy?'Sending…':'Submit'}
       </button></div>
       {busy?<div className="proof-upload-status"><progress max={100} value={uploadProgress} aria-label="Upload progress"/>
-        <p role="status">{uploadProgress<100?`Uploading: ${uploadProgress}%`:'Upload sent. Preparing videos and saving your proof…'}</p>
+        <p role="status">{uploadProgress<100?`Uploading and verifying: ${uploadProgress}%`:'Uploads verified. Saving your proof…'}</p>
         <button type="button" className="btn-secondary" onClick={onCancelUpload}>Cancel upload</button>
       </div>:null}
       <p>First approved submission wins the clue.</p>

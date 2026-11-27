@@ -7,8 +7,8 @@ export default defineConfig({
   timeout: 30_000,
   outputDir: "./test-results",
   reporter: "list",
-  use: { baseURL: "http://127.0.0.1:5179", reducedMotion: "reduce" },
-  webServer: {
+  use: { baseURL: process.env.E2E_BASE_URL ?? "http://127.0.0.1:5179", reducedMotion: "reduce" },
+  webServer: process.env.E2E_BASE_URL ? undefined : {
     command: "npm run dev -- --host 127.0.0.1 --port 5179 --strictPort",
     url: "http://127.0.0.1:5179", reuseExistingServer: true,
   },

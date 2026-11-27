@@ -3,6 +3,8 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  // Keep the package's relative worker URL intact in development.
+  optimizeDeps: {exclude: ['@ffmpeg/ffmpeg']},
   server: {
     port: 5173,
     proxy: {

@@ -85,7 +85,7 @@ def _clean_message(message: str) -> str:
 def _to_http(exc: APIError) -> HTTPException:
     message = getattr(exc, "message", None) or str(exc)
     code = getattr(exc, "code", None)
-    status = 404 if code=='PT404' else 409 if code in {"23505", "PT409"} else 400
+    status = 404 if code=='PT404' else 410 if code=='PT410' else 409 if code in {"23505", "PT409"} else 400
     return HTTPException(status_code=status, detail=_clean_message(message))
 
 
@@ -229,6 +229,9 @@ def _cleanup_session_media(session_id: str) -> bool:
                     _preserve_shared_assets(bucket,session_id,paths)
                 for offset in range(0,len(paths),100):bucket.remove(paths[offset:offset+100])
                 if _storage_session_paths(bucket,session_id):raise RuntimeError('Session media remains in Storage')
+            # Signed resumable capabilities cannot be revoked individually.
+            # Re-sweep deleted prefixes until every issued upload has expired.
+            if pending_direct_uploads(session_id):return True
             _select('session_media_deletions').delete().eq('session_id',session_id).execute()
             return False
         except Exception as exc:
@@ -828,6 +831,10 @@ def upload_challenge_image(
     except Exception as exc:
         raise HTTPException(status_code=400, detail="image upload failed") from exc
     return path
+
+
+def pending_direct_uploads(session_id: str) -> bool:
+    return bool(rpc('has_live_proof_uploads',{'p_session_id':session_id},retry=True))
 
 
 def upload_proof(session_id: str, team_id: str, filename: str, data: Any, content_type: str) -> str:

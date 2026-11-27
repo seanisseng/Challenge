@@ -7,15 +7,13 @@ test('at least one nonempty medium or message is required',()=>{
  assert.equal(draftError({files:[new File(['video'],'a.mp4',{type:'video/mp4'})],text:'Details'}),null);
 });
 
-test('Vercel attachment budget applies to images, videos and their combined size',()=>{
+test('direct Storage limits allow videos beyond the Vercel body budget',()=>{
  const sized=(size:number,type='video/mp4')=>({name:'recording.mp4',type,size} as File);
- const budget=4*1024**2;
- for(const type of ['image/jpeg','video/mp4']){
+ for(const [type,budget] of [['image/jpeg',25*1024**2],['video/mp4',45*1024**2]] as const){
   assert.equal(draftError({files:[sized(budget,type)],text:'x'.repeat(4000)}),null);
   assert.ok(draftError({files:[sized(budget+1,type)],text:''}));
  }
- assert.equal(draftError({files:[sized(budget/2,'image/jpeg'),sized(budget/2)],text:''}),null);
- assert.ok(draftError({files:[sized(budget/2,'image/jpeg'),sized(budget/2+1)],text:''}));
+ assert.equal(draftError({files:[sized(20*1024**2,'image/jpeg'),sized(40*1024**2)],text:''}),null);
  assert.equal(draftError({files:[{name:'phone.MOV',type:'',size:100} as File],text:''}),null);
 });
 test('invalid, empty and excessive attachments are rejected',()=>{
