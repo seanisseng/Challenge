@@ -93,6 +93,30 @@ For a separately hosted backend, set `VITE_API_BASE_URL` to its public origin
 without `/api` or a trailing slash, and set `BACKEND_CORS_ORIGINS` to the
 frontend's exact origin (comma-separated for multiple origins).
 
+### Vercel project setup
+
+The root `vercel.json` defines a Vite `frontend` and a FastAPI `backend` in one
+project. Set Vercel's Root Directory to the repository root (not `frontend`),
+use the Other project framework preset, and clear project-wide build/install/
+output overrides so the per-service configuration controls each build.
+The top-level rewrites send `/api/*` and `/ws` to the backend and all other
+paths to the frontend. The frontend's own rewrite serves client-side routes
+such as `/admin` through `index.html`.
+
+No internal service bindings are required: the Vite app runs in the browser
+and calls the public API on the same origin. Supabase remains an external
+dependency configured with the backend environment variables.
+
+After committing and pushing the configuration, use `vercel dev --local` from
+the repository root for local services testing, and check the next deployment's
+service builds. A missing PIN should return 503 from `/api/admin/login`, and
+an incorrect PIN should return 401; a 404 means routing still needs inspection.
+
+Deployment routing does not make the current in-process game scheduling and
+WebSocket broadcasting shared across function instances. The backend's existing
+single-worker assumption still needs review before running a live game on an
+autoscaling deployment. See [Vercel WebSocket state guidance](https://vercel.com/docs/functions/websockets#manage-persistent-state).
+
 ## How a game runs
 
 1. **Host** opens `/admin`, types the PIN from `backend/.env`, and creates a
