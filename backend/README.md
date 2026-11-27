@@ -254,10 +254,24 @@ image replaces the challenge's reference; previous objects remain in storage.
 
 ## Admin board controls
 
-Every new session receives the 29 built-in challenges from `challenge_templates`.
-Its opening board is prepared immediately but hidden from teams. Migration 0014
-also prepares existing lobby boards and fills existing empty lobby pools.
+Every new session receives the 49 built-in challenges from `challenge_templates`.
+Apply migration `20260101000033_random_challenge_board.sql` to shuffle that pool
+once per new session. The opening board takes the first `active_task_limit`
+challenges; replacements follow the saved queue order, including host edits.
+Refreshing, hiding or revealing the board does not reshuffle it. Existing games
+keep their order. The opening board is prepared immediately but hidden from
+teams. Migration 0014 also prepares existing lobby boards and fills existing
+empty lobby pools.
 The Content tab is replaced by a Board view and a separate Clues tab.
+
+Migrations 33 and 34 were applied to hosted Supabase on 2026-11-27 as
+`20261127103746` (`random_challenge_board`) and `20261127103747`
+(`sync_challenge_catalog`). Migration 34 matches `challenges/challenges.md`,
+updates untouched open challenges in unfinished games, and appends missing
+entries to their queues. Claimed, discarded and previously submitted challenges
+retain their content; IDs, submissions, rewards and existing queue positions are
+preserved. Ended games are unchanged. The shared `challenge7.jpg` reference was
+uploaded and verified. New sessions use all 49 updated entries.
 
 - **Reveal Board** starts a lobby session and shows the prepared challenges to teams.
 - **Hide Board** removes challenges from team snapshots and blocks submissions.
@@ -270,8 +284,9 @@ The Content tab is replaced by a Board view and a separate Clues tab.
   ended games cannot be moved.
 - The queue shows the next six challenges with an option to show all. Queue
   details are included only in admin snapshots. Drag a grip using mouse or touch
-  to reorder; dropping saves once. Arrow buttons and arrow keys on the grip
-  provide the same control without dragging. Escape or an interrupted drag
+  to reorder; dragging expands the full queue and dropping saves once. Arrow
+  buttons and arrow keys on the grip provide the same control without dragging.
+  Escape or an interrupted drag
   cancels the preview. The queue scrolls as a dragged card approaches a viewport
   edge. Concurrent queue changes cancel a drag or reject a stale save with HTTP
   409 so another host's order is not silently overwritten.

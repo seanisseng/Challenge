@@ -5,6 +5,46 @@ import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { installBoardFixture } from "./board.fixture";
 
+test('Review opens by default and new requests join the bottom of the oldest-first queue',async({page})=>{
+ const fixture=await installBoardFixture(page);const proof=fixture.state.submissions[0];
+ fixture.state.submissions=[
+  {...proof,id:'new',teams:{name:'Newest team'},submitted_at:'2026-11-27T10:02:00Z'},
+  {...proof,id:'old',teams:{name:'Oldest team'},submitted_at:'2026-11-27T10:00:00Z'},
+  {...proof,id:'middle',teams:{name:'Middle team'},submitted_at:'2026-11-27T10:01:00Z'},
+ ];
+ await page.goto('/admin');
+ await expect(page.getByRole('button',{name:/^Review/})).toHaveAttribute('aria-current','page');
+ const queue=page.getByRole('complementary',{name:'Pending submissions'}).getByRole('button');
+ await expect(queue).toContainText(['Oldest team','Middle team','Newest team']);
+ await expect(queue.first()).toHaveAttribute('aria-pressed','true');
+ fixture.state.submissions.unshift({...proof,id:'later',teams:{name:'Later team'},submitted_at:'2026-11-27T10:03:00Z'});
+ fixture.push();
+ await expect(queue).toContainText(['Oldest team','Middle team','Newest team','Later team']);
+ await expect(queue.first()).toHaveAttribute('aria-pressed','true');
+ await page.getByRole('button',{name:/^Reject/}).click();
+ await expect(queue).toContainText(['Middle team','Newest team','Later team']);
+ await expect(queue.first()).toHaveAttribute('aria-pressed','true');
+ fixture.state.submissions.unshift({...proof,id:'last',teams:{name:'Last team'},submitted_at:'2026-11-27T10:04:00Z'});
+ fixture.pushEvent({kind:'admin_update',session_id:fixture.state.session.id,changes:{
+  session:fixture.state.session,board:fixture.state.board,queue:fixture.state.queue,
+  progress:fixture.state.progress,submissions:fixture.state.submissions,
+ }});
+ await expect(queue).toContainText(['Middle team','Newest team','Later team','Last team']);
+ await page.getByRole('button',{name:/^Approve/}).click();
+ await expect(queue).toContainText(['Newest team','Later team','Last team']);
+ await expect(queue.first()).toHaveAttribute('aria-pressed','true');
+});
+
+test('decision log keeps recent decisions first when API snapshots are oldest first',async({page})=>{
+ const fixture=await installBoardFixture(page);const proof=fixture.state.submissions[0];
+ fixture.state.submissions=[
+  {...proof,id:'old-decision',status:'approved',teams:{name:'Old reviewed team'},submitted_at:'2026-11-27T10:00:00Z'},
+  {...proof,id:'new-decision',status:'rejected',teams:{name:'New reviewed team'},submitted_at:'2026-11-27T10:02:00Z'},
+ ];
+ await page.goto('/admin');
+ await expect(page.locator('.review-history li')).toContainText(['New reviewed team','Old reviewed team']);
+});
+
 test('partial review updates remove decided proofs from the pending queue',async({page})=>{
  const fixture=await installBoardFixture(page);
  await page.goto('/admin');await expect(page.getByText('Live connection',{exact:true})).toBeVisible();

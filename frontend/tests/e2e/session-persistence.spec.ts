@@ -20,6 +20,7 @@ test('new sessions default to eight teams',async({page})=>{
  await page.getByRole('button',{name:'Create session',exact:true}).click();
  await expect.poll(()=>requests.length).toBe(1);
  expect(requests[0]).toMatchObject({name:'Eight teams',team_count:8});
+ await expect(page.getByRole('button',{name:/^Review/})).toHaveAttribute('aria-current','page');
 });
 
 function state() {

@@ -47,7 +47,7 @@ export default function AdminConsole({ onSignOut }: Props) {
   const [sessionId, setSessionId] = useState<string | null>(getAdminSession());
   const [state, setState] = useState<AdminState | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [tab, setTab] = useState<Tab>("board");
+  const [tab, setTab] = useState<Tab>("review");
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deletionNotice,setDeletionNotice]=useState<string|null>(null);
@@ -122,7 +122,7 @@ export default function AdminConsole({ onSignOut }: Props) {
     setAdminSession(id);
     setSessionId(id);
     setError(null);
-    setTab("board");
+    setTab("review");
     setSelectedSubmissionId(null);
   };
 

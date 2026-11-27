@@ -152,7 +152,8 @@ export function ChallengeQueue({ queue, sessionId, disabled, renderRemove, onAct
     <aside className="race-queue">
       <div className="board-section-heading"><div><span className="race-section-index">02</span><h3>UP NEXT</h3></div><span className="queue-total">{String(queue.length).padStart(2, "0")} queued</span></div>
       <p id="queue-drag-help" className="queue-instructions">
-        Drag to set the next move. Use the arrows or arrow keys on a grip, too.
+        Drag a numbered grip to set which challenge comes next. Release to save.
+        You can also use the arrows or arrow keys on a grip.
       </p>
       <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
       {queue.length === 0 ? <div className="race-empty queue-empty"><Inbox size={28} aria-hidden="true" /><h4>The queue is empty.</h4><p>Every available challenge is in play or has left this race.</p></div> : (
@@ -164,6 +165,7 @@ export function ChallengeQueue({ queue, sessionId, disabled, renderRemove, onAct
             current.y = event.clientY;
             if (!current.active && Math.abs(current.y - current.startY) > 6) {
               current.active = true;
+              setShowAll(true);
               setDraggingId(current.id);
               onDraggingChange(true);
               setAnnouncement("Dragging challenge. Release to save, or press Escape to cancel.");

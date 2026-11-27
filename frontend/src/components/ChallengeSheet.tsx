@@ -31,6 +31,21 @@ export function ChallengeSheet({ challenge, busy, error, trigger, onClose, onUpl
   const submission = challenge.my_submission;
   const pending=submission?.status==='pending';
   const [preparing,setPreparing]=useState(false);
+  const [sending,setSending]=useState(false);
+  const submitLock=useRef(false);
+  const submitting=busy||sending;
+  const submitDisabled=preparing||submitting||draftLoading||pending||challenge.status==='claimed'||Boolean(draftError(draft));
+  const close=()=>{if(!submitting)onClose();};
+  const submit=async()=>{
+    if(submitLock.current||submitDisabled)return;
+    submitLock.current=true;setSending(true);
+    let sent=false;
+    try{sent=await onUpload(draft);}
+    finally{
+      // Keep successful submissions locked until the parent closes this sheet.
+      if(!sent){submitLock.current=false;setSending(false);}
+    }
+  };
 
   useEffect(() => {
     const element = dialog.current;
@@ -46,25 +61,26 @@ export function ChallengeSheet({ challenge, busy, error, trigger, onClose, onUpl
     const velocity = distance / Math.max(1, performance.now() - drag.current.time);
     drag.current = null;
     dialog.current?.style.removeProperty("--sheet-drag-y");
-    if (distance > 90 || (distance > 35 && velocity > .6)) onClose();
+    if (distance > 90 || (distance > 35 && velocity > .6)) close();
   };
 
   return <dialog ref={dialog} className="challenge-sheet" aria-labelledby="challenge-sheet-title"
-    onCancel={event => { event.preventDefault(); onClose(); }}
+    onCancel={event => { event.preventDefault(); close(); }}
     onPointerDown={event => { if (event.clientX <= 24) edgeStart.current = { x: event.clientX, y: event.clientY }; }}
     onPointerUp={event => {
       const start = edgeStart.current;
       edgeStart.current = null;
-      if (start && event.clientX - start.x > 80 && Math.abs(event.clientY - start.y) < 60) onClose();
+      if (start && event.clientX - start.x > 80 && Math.abs(event.clientY - start.y) < 60) close();
     }}
     onPointerCancel={() => { edgeStart.current = null; }}
     onClick={event => {
       if (event.target !== event.currentTarget) return;
       const rect = event.currentTarget.getBoundingClientRect();
-      if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) onClose();
+      if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) close();
     }}>
     <div className="sheet-drag-area" aria-hidden="true"
       onPointerDown={event => {
+        if(submitting)return;
         drag.current = { y: event.clientY, time: performance.now() };
         event.currentTarget.setPointerCapture(event.pointerId);
       }}
@@ -78,7 +94,7 @@ export function ChallengeSheet({ challenge, busy, error, trigger, onClose, onUpl
     <div className="sheet-topline">
       <TierBadge tier={challenge.clue_tier} />
       <ProofStatus challenge={challenge} />
-      <button type="button" onClick={onClose} aria-label="Close challenge" className="sheet-close"><X size={22} aria-hidden="true" /></button>
+      <button type="button" onClick={close} disabled={submitting} aria-label="Close challenge" className="sheet-close"><X size={22} aria-hidden="true" /></button>
     </div>
     <div className="sheet-content">
       <h2 id="challenge-sheet-title">{challenge.title}</h2>
@@ -98,16 +114,16 @@ export function ChallengeSheet({ challenge, busy, error, trigger, onClose, onUpl
           : `Rejected${submission.review_note ? `: ${submission.review_note}` : ". You can try again."}`}
       </p> : null}
       {error ? <p role="alert" className="sheet-error">{error}</p> : null}
-      {!pending?<SubmissionComposer draft={draft} onChange={onDraftChange} onPreparingChange={setPreparing} disabled={busy||draftLoading||challenge.status==='claimed'}/>:null}
+      {!pending?<SubmissionComposer draft={draft} onChange={onDraftChange} onPreparingChange={setPreparing} disabled={submitting||draftLoading||challenge.status==='claimed'}/>:null}
       {!pending&&draftStatus?<p className="proof-limits" role={draftStorageError?'alert':'status'}>{draftStatus}</p>:null}
     </div>
     <div className="sheet-actions">
       <div className="proof-submit-actions">
-      <button type="button" className="btn-primary min-h-12" disabled={preparing || busy || draftLoading || pending || challenge.status === "claimed"||Boolean(draftError(draft))}
-        onClick={()=>void onUpload(draft)}>
-        {pending?'Awaiting host review':busy?'Sending…':'Submit'}
+      <button type="button" className="btn-primary min-h-12" disabled={submitDisabled} aria-busy={submitting}
+        onClick={()=>void submit()}>
+        {pending?'Awaiting host review':submitting?'Sending…':'Submit'}
       </button></div>
-      {busy?<div className="proof-upload-status"><progress max={100} value={uploadProgress} aria-label="Upload progress"/>
+      {submitting?<div className="proof-upload-status"><progress max={100} value={uploadProgress} aria-label="Upload progress"/>
         <p role="status">{uploadProgress<100?`Uploading and verifying: ${uploadProgress}%`:'Uploads verified. Saving your proof…'}</p>
         <button type="button" className="btn-secondary" onClick={onCancelUpload}>Cancel upload</button>
       </div>:null}

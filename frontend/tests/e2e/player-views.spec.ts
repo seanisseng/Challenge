@@ -486,6 +486,42 @@ test('message and attachment draft recover after a reload',async({page})=>{
  })).toBe(0);
 });
 
+test('submission controls stay grey and disabled through upload, saving and confirmation',async({page})=>{
+ const fixture=await playerFixture(page);
+ let authorize!:()=>void,finalize!:()=>void,confirm!:()=>void;
+ const authorizing=new Promise<void>(resolve=>{authorize=resolve;});
+ const saving=new Promise<void>(resolve=>{finalize=resolve;});
+ const confirming=new Promise<void>(resolve=>{confirm=resolve;});
+ let stage='starting';
+ await page.route('**/api/uploads',async route=>{stage='uploading';await authorizing;await route.fallback();});
+ await page.route('**/api/submissions/finalize',async route=>{
+  stage='saving';await saving;stage='confirming';await route.fulfill({json:{ok:true}});
+ });
+ await page.route('**/api/state',async route=>{if(stage==='confirming')await confirming;await route.fallback();});
+ try{
+  await page.goto('/');await page.getByRole('button',{name:/Going Bananas/}).click();
+  await page.getByRole('textbox',{name:/Message/}).fill('Keep locked until received');
+  await page.locator('input[type=file]').setInputFiles({name:'proof.png',mimeType:'image/png',buffer:Buffer.from('proof')});
+  await expect(page.getByRole('button',{name:'Remove proof.png',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Submit',exact:true}).click();
+  const locked=async()=>{
+   for(const name of ['Sending…','Add images or videos','Remove proof.png','Close challenge']){
+    const button=page.getByRole('button',{name,exact:true});
+    await expect(button).toBeDisabled();
+    await expect(button).toHaveCSS('background-color','rgb(226, 232, 240)');
+   }
+   await expect(page.getByRole('textbox',{name:/Message/})).toBeDisabled();
+   await expect(page.getByRole('button',{name:'Cancel upload',exact:true})).toBeEnabled();
+  };
+  await expect.poll(()=>stage).toBe('uploading');await locked();
+  authorize();await expect.poll(()=>stage).toBe('saving');
+  fixture.push();await locked();
+  await page.keyboard.press('Escape');await expect(page.locator('.challenge-sheet')).toBeVisible();
+  finalize();await expect.poll(()=>stage).toBe('confirming');await locked();
+  confirm();await expect(page.locator('.challenge-sheet')).toHaveCount(0);
+ }finally{authorize();finalize();confirm();}
+});
+
 test('uploads show progress, allow cancellation and retain the draft',async({page})=>{
  await playerFixture(page);
  let release!:()=>void;const waiting=new Promise<void>(resolve=>{release=resolve;});

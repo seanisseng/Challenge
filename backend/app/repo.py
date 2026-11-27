@@ -468,8 +468,9 @@ def submissions_by_team(team_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
 
 
 def session_submissions(session_id: str, status: str | None = None) -> list[dict[str, Any]]:
+    """Admin review queue: oldest submissions first, with stable timestamp ties."""
     def configure(query):
-        query = query.eq("session_id", session_id).order("submitted_at", desc=True)
+        query = query.eq("session_id", session_id).order("submitted_at", desc=False).order("id", desc=False)
         return query.eq("status", status) if status else query
     return _submission_rows(
         "id,session_id,challenge_id,team_id,team_member_id,photo_path,attachments,proof_text,status,"

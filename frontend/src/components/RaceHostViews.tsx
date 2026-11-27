@@ -6,6 +6,7 @@ import { TeamProgressCards, NoTeams, emptyTierCounts, type TierCounts } from "./
 import { SubmissionEvidenceView } from "./SubmissionEvidenceView";
 import {RaceDialog} from './RaceDialog';
 import { SubmissionStatusBadge, TierBadge } from "./Badges";
+import {pendingReviewQueue} from '../lib/reviewQueue';
 
 function PageHeading({ eyebrow, title, children }: { eyebrow: string; title: string; children: React.ReactNode }) {
   return <div className="race-page-heading"><p className="race-eyebrow"><Route size={14} aria-hidden="true" />{eyebrow}</p><h2>{title}</h2><p>{children}</p></div>;
@@ -18,8 +19,9 @@ export function ReviewTab({ submissions, selectedId, onSelect, onApprove, onReje
   onApprove: (id: string, note?: string) => void | Promise<void>;
   onReject: (id: string, note?: string) => void | Promise<void>;
 }) {
-  const pending = submissions.filter(item => item.status === "pending");
-  const history = submissions.filter(item => item.status !== "pending");
+  const pending = pendingReviewQueue(submissions);
+  const history = submissions.filter(item => item.status !== "pending").sort((a,b)=>
+    Date.parse(b.submitted_at)-Date.parse(a.submitted_at)||b.id.localeCompare(a.id));
   const workspaceRef = useRef<HTMLElement>(null);
   useEffect(() => { if (selectedId) workspaceRef.current?.focus(); }, [selectedId]);
   const selected = pending.find(item => item.id === selectedId) ?? pending[0];
@@ -50,7 +52,7 @@ export function ReviewTab({ submissions, selectedId, onSelect, onApprove, onReje
   }, [shortcuts]);
 
   return <section className="race-review">
-    <PageHeading eyebrow="RACE CONTROL / PROOF DESK" title="Make the call.">A clear proof, a quick decision, a new clue for the team.</PageHeading>
+    <PageHeading eyebrow="RACE CONTROL / PROOF DESK" title="Make the call.">Review the oldest submission first. New submissions join the bottom of the queue.</PageHeading>
     <div className="host-view-summary"><span><b>{String(pending.length).padStart(2, "0")}</b> awaiting review</span><span><b>{String(history.length).padStart(2, "0")}</b> reviewed</span><span className="review-shortcuts"><Keyboard size={15} aria-hidden="true" /><button type="button" aria-pressed={shortcuts} onClick={() => setShortcuts(value => !value)}>{shortcuts ? "A approve / R reject: On" : "Keyboard shortcuts: Off"}</button></span></div>
     {!selected ? <div className="race-empty"><Inbox size={34} aria-hidden="true" /><h3>All caught up.</h3><p>New proof will appear here as teams submit. Keep the race moving from the Board.</p></div> : <div className="review-layout">
       <aside className="review-inbox" aria-label="Pending submissions"><p className="race-eyebrow">INCOMING PROOF</p><ol>{pending.map((item, index) => <li key={item.id}><button type="button" className={item.id === selected.id ? "review-inbox-item review-inbox-item--selected" : "review-inbox-item"} onClick={() => onSelect(item.id)} aria-pressed={item.id === selected.id}>

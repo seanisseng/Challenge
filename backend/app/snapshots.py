@@ -174,6 +174,8 @@ def game_data(session_id: str) -> dict[str, Any]:
 def team_game_update(team_id: str,data: dict[str,Any]) -> dict[str,Any]:
     own=[{key:value for key,value in row.items() if key not in ('team_id','session_id','teams','team_members','challenges')}
          for row in data['submissions'] if row['team_id']==team_id]
+    # Admin queues are FIFO; player status must still use the latest attempt.
+    own.sort(key=lambda row:(row['submitted_at'],row['id']),reverse=True)
     visible=data['session']['board_visible'] and data['session']['status']=='active'
     return {'kind':'team_update','session_id':data['session']['id'],'team_id':team_id,
             'changes':{'session':data['session'],'board':_board_with_my_status(data['board'] if visible else [],own),

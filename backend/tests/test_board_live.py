@@ -22,12 +22,13 @@ def test_prepopulated_board_visibility_and_queue():
     session_id = created.json()["session"]["id"]
     base = f"/api/admin/sessions/{session_id}"
     try:
-        assert len(repo.all_challenges(session_id)) == 29
+        assert len(repo.all_challenges(session_id)) == 49
         state = client.get(base + "/state", headers=admin).json()
         assert len(state["board"]) == 6
-        assert len(state["queue"]) == 23
+        assert len(state["queue"]) == 43
         assert state["session"]["board_visible"] is False
-        assert [c["clue_tier"] for c in state["board"]] == ["tier1", "tier3", "tier2", "tier1", "tier2", "tier3"]
+        assert len({c["id"] for c in state["board"] + state["queue"]}) == 49
+        assert [c["sort_order"] for c in state["board"]] == list(range(1, 7))
         joined = client.post("/api/join", json={"code": created.json()["teams"][0]["join_code"], "name": "Queue Tester"}).json()
         team_headers = {"X-Team-Token": joined["token"]}
         assert joined["state"]["board"] == []
@@ -110,7 +111,7 @@ def test_discarded_cards_never_return_when_the_deck_is_exhausted():
     session_id = session["session_id"]
     try:
         fresh_pool = repo.all_challenges(session_id)
-        assert len(fresh_pool) == 29 and all(not c["is_discarded"] for c in fresh_pool)
+        assert len(fresh_pool) == 49 and all(not c["is_discarded"] for c in fresh_pool)
         client.table("challenges").delete().eq("session_id", session_id).execute()
         cards = [repo.create_challenge(session_id, f"Card {i}", None, "Photo", "tier1", i) for i in range(3)]
         repo.refill_board(session_id)
