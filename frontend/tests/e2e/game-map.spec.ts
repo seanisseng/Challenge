@@ -93,13 +93,13 @@ test('hidden teams disappear from player maps and delayed pre-hide fixes stay hi
  fixture.state.map.locations=[rival];await page.goto('/');await openMap(page,info.project.name);
  await page.getByRole('button',{name:'Share my location',exact:true}).click();
  await expect(page.getByRole('button',{name:'Stop sharing',exact:true})).toBeVisible();
- await expect(page.locator('.map-roster')).toContainText('Rival tracker');
+ await expect(page.locator('.map-pin-shell[title="Rival tracker"]')).toHaveCount(1);
  fixture.hideTeam('rival',true);fixture.push();
- await expect(page.locator('.map-roster')).not.toContainText('Rival tracker');
+ await expect(page.locator('.map-pin-shell[title="Rival tracker"]')).toHaveCount(0);
  fixture.emit({kind:'location',session_id:fixture.state.session.id,visibility_revision:0,location:{...rival,revision:99}});
- await expect(page.locator('.map-roster')).not.toContainText('Rival tracker');
+ await expect(page.locator('.map-pin-shell[title="Rival tracker"]')).toHaveCount(0);
  await expect(page.getByRole('dialog')).toHaveCount(0);
- fixture.hideTeam('rival',false);fixture.push();await expect(page.locator('.map-roster')).toContainText('Rival tracker');
+ fixture.hideTeam('rival',false);fixture.push();await expect(page.locator('.map-pin-shell[title="Rival tracker"]')).toHaveCount(1);
 });
 
 test('host can hide and restore a team without ending the game',async({page})=>{
@@ -128,10 +128,12 @@ test('players see the area, opt in to GPS, stop sharing and receive automatic ar
  await expect(page.getByText('Hidden destination (host only)',{exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'Share my location',exact:true}).click();
  await expect(page.getByRole('button',{name:'Stop sharing',exact:true})).toBeVisible();
- await expect(page.getByText('Team 1 (your device)',{exact:true})).toBeVisible();
+ await expect(page.locator('.map-pin-shell[title="Team 1"]')).toHaveCount(1);
  expect(fixture.calls).toEqual(['start','fix']);
+ const boundary=page.locator('.leaflet-overlay-pane path').nth(1);
+ const previousBoundary=await boundary.getAttribute('d');
  fixture.state.map={...fixture.state.map,area:stage1,stage_index:1,started_at:new Date().toISOString()};fixture.push();
- await expect(page.getByText('Area 2 of 2',{exact:true})).toBeVisible();
+ await expect(boundary).not.toHaveAttribute('d',previousBoundary!);
  await expect(page.getByRole('dialog',{name:'The playing area has shrunk'})).toBeVisible();
  await page.getByRole('button',{name:'Got it',exact:true}).click();
  await expect(page.locator('.playing-area')).not.toContainText('Next shrink');
@@ -141,7 +143,7 @@ test('players see the area, opt in to GPS, stop sharing and receive automatic ar
  await page.screenshot({path:`artifacts/playing-area-${info.project.name}.png`});
  await page.getByRole('button',{name:'Stop sharing',exact:true}).click();
  await expect(page.getByRole('button',{name:'Share my location',exact:true})).toBeVisible();
- await expect(page.getByText('Team 1 (your device)',{exact:true})).toHaveCount(0);
+ await expect(page.locator('.map-pin-shell[title="Team 1"]')).toHaveCount(0);
  expect(fixture.calls).toEqual(['start','fix','stop']);
 });
 
@@ -194,6 +196,14 @@ test('accepting the join prompt keeps the board open and provides phone-friendly
   const box=(await stop.boundingBox())!;
   expect(box.y+box.height).toBeLessThanOrEqual((await page.getByRole('region',{name:'Playing area map'}).boundingBox())!.y);expect(box.height).toBeGreaterThanOrEqual(44);
   expect(box.x+box.width).toBeLessThanOrEqual(width);
+  await expect(page.locator('.map-heading,.playing-area .map-status-strip,.map-sharing,.map-roster,.playing-area .map-legend')).toHaveCount(0);
+  await expect(page.locator('.player-layout--map')).toHaveCSS('padding-bottom','0px');
+  const mapBox=(await page.getByRole('region',{name:'Playing area map'}).boundingBox())!;
+  const navBox=(await page.getByRole('navigation',{name:'Game views'}).boundingBox())!;
+  expect(mapBox.x).toBe(0);expect(mapBox.width).toBe(width);
+  expect(Math.abs(mapBox.y+mapBox.height-navBox.y)).toBeLessThanOrEqual(1);
+  expect(mapBox.height).toBeGreaterThan(400);
+  expect(await page.locator('.player-main').evaluate(el=>el.scrollHeight<=el.clientHeight)).toBe(true);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  }
  await page.setViewportSize({width:390,height:844});
@@ -243,15 +253,20 @@ test('the map control can cancel a pending location request before GPS responds'
  expect(fixture.calls).toEqual([]);
 });
 
-test('multiple devices on one team render one tracker and one roster entry',async({page},info)=>{
+test('multiple devices on one team render one tracker with device details',async({page},info)=>{
  const fixture=await install(page);const now=new Date().toISOString();
  const device=(id:string,lng:number)=>({team_id:'team-0',team_name:'Team 1',device_id:id,lat:1.31,lng,accuracy_m:10,updated_at:now,revision:1});
  fixture.state.map.locations=[device('a',103.90),device('b',103.902)];
  await page.goto('/');await openMap(page,info.project.name);
- await expect(page.locator('.map-pin-shell')).toHaveCount(1);await expect(page.locator('.map-roster li')).toHaveCount(1);
- await expect(page.locator('.map-roster')).toContainText('2 devices');
+ await expect(page.locator('.map-pin-shell')).toHaveCount(1);
+ await page.locator('.map-pin-shell').click();
+ await expect(page.locator('.leaflet-popup-content')).toContainText('2 shared devices');
+ await page.locator('.leaflet-popup-close-button').click();
+ await expect(page.locator('.leaflet-popup-content')).toHaveCount(0);
  fixture.state.map.locations=[device('b',103.902)];fixture.push();
- await expect(page.locator('.map-pin-shell')).toHaveCount(1);await expect(page.locator('.map-roster')).toContainText('1 device');
+ await expect(page.locator('.map-pin-shell')).toHaveCount(1);
+ await page.locator('.map-pin-shell').click();
+ await expect(page.locator('.leaflet-popup-content')).toContainText('1 shared device');
  fixture.state.map.locations=[];fixture.push();await expect(page.locator('.map-pin-shell')).toHaveCount(0);
 });
 
@@ -260,13 +275,12 @@ test('rival trackers require this device to share, even when another teammate is
  fixture.state.map.locations=[{team_id:'team-0',team_name:'Team 1',device_id:'teammate',lat:1.31,lng:103.90,accuracy_m:10,updated_at:now,revision:1},
   {team_id:'rival',team_name:'Rival tracker',device_id:'other',lat:1.31,lng:103.92,accuracy_m:10,updated_at:now,revision:1}];
  await page.goto('/');await openMap(page,info.project.name);
- await expect(page.locator('.map-pin-shell')).toHaveCount(1);await expect(page.locator('.map-roster')).not.toContainText('Rival tracker');
- await expect(page.locator('.map-roster')).toContainText('Share your location to see other teams.');
+ await expect(page.locator('.map-pin-shell')).toHaveCount(1);await expect(page.locator('.map-pin-shell[title="Rival tracker"]')).toHaveCount(0);
  await page.getByRole('button',{name:'Share my location',exact:true}).click();
  await expect(page.getByRole('button',{name:'Stop sharing',exact:true})).toBeVisible();
- await expect(page.locator('.map-pin-shell')).toHaveCount(2);await expect(page.locator('.map-roster')).toContainText('Rival tracker');
+ await expect(page.locator('.map-pin-shell')).toHaveCount(2);await expect(page.locator('.map-pin-shell[title="Rival tracker"]')).toHaveCount(1);
  await page.getByRole('button',{name:'Stop sharing',exact:true}).click();
- await expect(page.locator('.map-roster')).not.toContainText('Rival tracker');await expect(page.locator('.map-pin-shell')).toHaveCount(1);
+ await expect(page.locator('.map-pin-shell[title="Rival tracker"]')).toHaveCount(0);await expect(page.locator('.map-pin-shell')).toHaveCount(1);
 });
 
 test('players get a shrink modal from the board, without timer details or duplicate alerts',async({page},info)=>{
